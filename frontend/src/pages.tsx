@@ -1111,6 +1111,7 @@ export function MonitoringView({
   const cleanupTasks = new Map((state.tasks || []).map((task) => [task.id, task]));
   const links = summary?.links || state.links || {};
   const hosts = summary?.hosts || [];
+  const alerts = summary?.alerts || [];
   return (
     <Space direction="vertical" size={16} className="side-stack">
       <Card
@@ -1125,6 +1126,9 @@ export function MonitoringView({
           <Space wrap>
             {summary?.source && <Tag color={monitoringSourceColor(summary.source)}>{monitoringSourceText(summary.source)}</Tag>}
             {summary?.checked_at && <Text type="secondary">{checkedAtText(summary.checked_at, nowMs)}</Text>}
+            {links.beszel && <Button href={links.beszel} target="_blank" icon={<ExternalLink size={15} />}>Beszel</Button>}
+            {links.grafana && <Button href={links.grafana} target="_blank" icon={<ExternalLink size={15} />}>Grafana</Button>}
+            {links.woodpecker && <Button href={links.woodpecker} target="_blank" icon={<ExternalLink size={15} />}>流水线</Button>}
             <Button icon={<RefreshCw size={16} />} loading={loading} onClick={onRefresh}>
               刷新
             </Button>
@@ -1134,50 +1138,24 @@ export function MonitoringView({
         {summary?.degraded_reason && (
           <Alert className="monitoring-alert-inline" type="warning" showIcon message="监控已降级" description={summary.degraded_reason} />
         )}
-        <MonitoringResourceOverview hosts={hosts} alerts={summary?.alerts || []} loading={loading} />
+        <MonitoringResourceOverview hosts={hosts} alerts={alerts} loading={loading} />
       </Card>
 
-      <Card title="所有系统">
+      <Card
+        title="机器资源"
+        extra={<Text type="secondary">{hosts.length ? `${hosts.length} 台被管机器` : "未配置被管机器"}</Text>}
+      >
         <MonitoringSystemTable
           rows={hosts}
-          links={links}
           cleanupTasks={cleanupTasks}
           currentUser={state.current_user}
           onRun={onRun}
         />
       </Card>
 
-      <Card title="异常提醒">
-        {summary?.alerts?.length ? (
-          <List
-            dataSource={summary.alerts}
-            renderItem={(row) => (
-              <List.Item className="monitoring-alert-row">
-                <List.Item.Meta
-                  title={
-                    <Space wrap>
-                      <Tag color={monitoringAlertColor(row.level)}>{monitoringAlertText(row.level)}</Tag>
-                      <Text strong>{row.title}</Text>
-                    </Space>
-                  }
-                  description={<Text type={row.level === "critical" ? "danger" : "secondary"}>{row.message}</Text>}
-                />
-              </List.Item>
-            )}
-          />
-        ) : (
-          <Alert type="success" showIcon message="当前没有资源异常" />
-        )}
-      </Card>
-
       <Card
         title="核心容器"
-        extra={
-          <Space wrap>
-            {links.beszel && <Button href={links.beszel} target="_blank" icon={<ExternalLink size={15} />}>Beszel</Button>}
-            {links.grafana && <Button href={links.grafana} target="_blank" icon={<ExternalLink size={15} />}>Grafana</Button>}
-          </Space>
-        }
+        extra={<Text type="secondary">{summary?.containers?.length || 0} 个检查项</Text>}
       >
         <MonitoringContainerTable rows={summary?.containers || []} />
       </Card>
@@ -1203,17 +1181,35 @@ function MonitoringResourceOverview({
   if (!hosts.length && !loading) {
     return <Alert type="info" showIcon message="监控数据暂不可用" />;
   }
+  const headline = criticalCount ? `${criticalCount} 个紧急异常` : warningCount ? `${warningCount} 个提醒` : "资源状态正常";
+  const headlineTone = criticalCount ? "danger" : warningCount ? "warning" : "success";
+  const topAlerts = alerts.filter((alert) => alert.level === "critical" || alert.level === "warning").slice(0, 3);
   return (
-    <div className="monitor-overview-grid">
-      <MonitoringOverviewItem label="系统健康" value={hosts.length ? `${normalCount}/${hosts.length} 正常` : "-"} tone={normalCount === hosts.length ? "success" : "warning"} />
-      <MonitoringOverviewItem label="CPU 最高" value={`${formatPercent(highestCPU.value)}%`} meta={highestCPU.host?.name || "-"} tone={metricTone(highestCPU.value)} />
-      <MonitoringOverviewItem label="内存最高" value={`${formatPercent(highestMemory.value)}%`} meta={highestMemory.host?.name || "-"} tone={metricTone(highestMemory.value)} />
-      <MonitoringOverviewItem label="磁盘最高" value={`${formatPercent(highestDisk.value)}%`} meta={highestDisk.host?.name || "-"} tone={metricTone(highestDisk.value)} />
-      <MonitoringOverviewItem
-        label="异常提醒"
-        value={criticalCount ? `${criticalCount} 个紧急` : warningCount ? `${warningCount} 个提醒` : "无异常"}
-        tone={criticalCount ? "danger" : warningCount ? "warning" : "success"}
-      />
+    <div className="monitor-overview-panel">
+      <div className="monitor-overview-head">
+        <div>
+          <Tag color={monitoringAlertColor(headlineTone === "danger" ? "critical" : headlineTone === "warning" ? "warning" : "info")}>
+            {headline}
+          </Tag>
+          <Text strong className="monitor-overview-title">{hosts.length ? `${normalCount}/${hosts.length} 台在线` : "等待监控数据"}</Text>
+        </div>
+        <Text type="secondary">只保留关键水位，细节在下方机器资源表查看。</Text>
+      </div>
+      <div className="monitor-pressure-grid">
+        <MonitoringOverviewItem label="CPU 峰值" value={`${formatPercent(highestCPU.value)}%`} meta={highestCPU.host?.name || "-"} tone={metricTone(highestCPU.value)} />
+        <MonitoringOverviewItem label="内存峰值" value={`${formatPercent(highestMemory.value)}%`} meta={highestMemory.host?.name || "-"} tone={metricTone(highestMemory.value)} />
+        <MonitoringOverviewItem label="磁盘峰值" value={`${formatPercent(highestDisk.value)}%`} meta={highestDisk.host?.name || "-"} tone={metricTone(highestDisk.value)} />
+      </div>
+      {topAlerts.length ? (
+        <div className="monitor-alert-strip">
+          {topAlerts.map((alert, index) => (
+            <div className="monitor-alert-chip" key={`${alert.host_id || alert.host_name || "alert"}-${alert.metric || index}`}>
+              <Tag color={monitoringAlertColor(alert.level)}>{monitoringAlertText(alert.level)}</Tag>
+              <Text type={alert.level === "critical" ? "danger" : "secondary"}>{alert.message}</Text>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1242,13 +1238,11 @@ function MonitoringOverviewItem({
 
 function MonitoringSystemTable({
   rows,
-  links,
   cleanupTasks,
   currentUser,
   onRun
 }: {
   rows: MonitoringHost[];
-  links: Record<string, string>;
   cleanupTasks: Map<string, Task>;
   currentUser: User;
   onRun: (task: Task) => void;
@@ -1256,53 +1250,40 @@ function MonitoringSystemTable({
   const columns: ColumnsType<MonitoringHost> = [
     {
       title: "系统",
-      width: 230,
+      width: 260,
       render: (_, row) => (
         <Space size={8}>
           <span className={`system-dot system-dot-${monitoringStatusColor(row.status)}`} />
           <Space direction="vertical" size={0}>
-            <Text strong>{row.name}</Text>
-            <Text type="secondary">{row.role || row.source}</Text>
+            <Space size={6} wrap>
+              <Text strong>{row.name}</Text>
+              <Tag color={monitoringStatusColor(row.status)}>{monitoringHostStatusText(row.status)}</Tag>
+            </Space>
+            <Text type="secondary">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
           </Space>
         </Space>
       )
     },
     {
-      title: "CPU",
-      width: 150,
-      render: (_, row) => <CompactMetric value={row.cpu_percent || 0} />
-    },
-    {
-      title: "内存",
-      width: 150,
-      render: (_, row) => <CompactMetric value={row.memory_percent || 0} />
-    },
-    {
-      title: "磁盘",
-      width: 150,
-      render: (_, row) => <CompactMetric value={row.disk_percent || 0} />
-    },
-    {
-      title: "负载",
-      width: 170,
+      title: "资源水位",
+      width: 330,
       render: (_, row) => (
-        <Space size={6}>
-          <span className="system-dot system-dot-success" />
-          <Text>{formatLoad(row.load_1)}</Text>
-          <Text>{formatLoad(row.load_5)}</Text>
-          <Text>{formatLoad(row.load_15)}</Text>
-        </Space>
+        <div className="monitor-resource-stack">
+          <CompactMetric label="CPU" value={row.cpu_percent || 0} />
+          <CompactMetric label="内存" value={row.memory_percent || 0} />
+          <CompactMetric label="磁盘" value={row.disk_percent || 0} />
+        </div>
       )
     },
     {
-      title: "网络",
-      width: 130,
-      render: (_, row) => <Text>{formatBytes(row.network_bytes_per_second || 0)}/s</Text>
-    },
-    {
-      title: "正常运行时间",
-      width: 160,
-      render: (_, row) => <Text>{row.uptime || "-"}</Text>
+      title: "运行",
+      width: 260,
+      render: (_, row) => (
+        <Space direction="vertical" size={2}>
+          <Text>负载 {formatLoad(row.load_1)} / {formatLoad(row.load_5)} / {formatLoad(row.load_15)}</Text>
+          <Text type="secondary">网络 {formatBytes(row.network_bytes_per_second || 0)}/s · {row.uptime || "-"}</Text>
+        </Space>
+      )
     },
     {
       title: "来源",
@@ -1311,11 +1292,10 @@ function MonitoringSystemTable({
     },
     {
       title: "操作",
-      width: 260,
+      width: 120,
       fixed: "right",
       render: (_, row) => (
         <MonitoringHostActions
-          links={links}
           cleanupTask={row.cleanup_task_id ? cleanupTasks.get(row.cleanup_task_id) : undefined}
           currentUser={currentUser}
           onRun={onRun}
@@ -1332,7 +1312,7 @@ function MonitoringSystemTable({
         columns={columns}
         dataSource={rows}
         pagination={false}
-        scroll={{ x: 1380 }}
+        scroll={{ x: 1080 }}
       />
       <List
         className="mobile-monitor-system-list"
@@ -1349,6 +1329,7 @@ function MonitoringSystemTable({
               }
               description={
                 <Space direction="vertical" size={8} className="side-stack">
+                  <Text type="secondary">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
                   <CompactMetric label="CPU" value={row.cpu_percent || 0} />
                   <CompactMetric label="内存" value={row.memory_percent || 0} />
                   <CompactMetric label="磁盘" value={row.disk_percent || 0} />
@@ -1356,7 +1337,6 @@ function MonitoringSystemTable({
                     负载 {formatLoad(row.load_1)} {formatLoad(row.load_5)} {formatLoad(row.load_15)} · 网络 {formatBytes(row.network_bytes_per_second || 0)}/s · {row.uptime || "-"}
                   </Text>
                   <MonitoringHostActions
-                    links={links}
                     cleanupTask={row.cleanup_task_id ? cleanupTasks.get(row.cleanup_task_id) : undefined}
                     currentUser={currentUser}
                     onRun={onRun}
@@ -1372,31 +1352,27 @@ function MonitoringSystemTable({
 }
 
 function MonitoringHostActions({
-  links,
   cleanupTask,
   currentUser,
   onRun
 }: {
-  links: Record<string, string>;
   cleanupTask?: Task;
   currentUser: User;
   onRun: (task: Task) => void;
 }) {
   const canCleanup = cleanupTask ? canRunTask(currentUser, cleanupTask) : false;
+  if (!cleanupTask) {
+    return <Text type="secondary">-</Text>;
+  }
   return (
     <Space wrap size={6} className="monitor-table-actions">
-      {links.beszel && <Button size="small" href={links.beszel} target="_blank" icon={<ExternalLink size={14} />}>Beszel</Button>}
-      {links.grafana && <Button size="small" href={links.grafana} target="_blank" icon={<ExternalLink size={14} />}>Grafana</Button>}
-      {links.woodpecker && <Button size="small" href={links.woodpecker} target="_blank" icon={<ExternalLink size={14} />}>流水线</Button>}
-      {cleanupTask && (
-        <Tooltip title={canCleanup ? "" : "仅管理员可执行"}>
-          <span>
-            <Button size="small" danger disabled={!canCleanup} onClick={() => onRun(cleanupTask)}>
-              清理磁盘
-            </Button>
-          </span>
-        </Tooltip>
-      )}
+      <Tooltip title={canCleanup ? "" : "仅管理员可执行"}>
+        <span>
+          <Button size="small" danger disabled={!canCleanup} onClick={() => onRun(cleanupTask)}>
+            清理磁盘
+          </Button>
+        </span>
+      </Tooltip>
     </Space>
   );
 }
@@ -2793,6 +2769,16 @@ function monitoringHostStatusText(status: string): string {
   if (!value || value === "unknown") return "未知";
   if (["ok", "up", "online", "healthy", "active"].includes(value)) return "正常";
   return status;
+}
+
+function monitoringRoleText(role: string): string {
+  const value = String(role || "").toLowerCase();
+  if (value === "production") return "生产节点";
+  if (value === "builder") return "构建节点";
+  if (value === "ops-builder") return "运维/测试节点";
+  if (value === "edge") return "边缘入口";
+  if (value === "infra") return "基础设施";
+  return role || "被管节点";
 }
 
 function monitoringAlertColor(level: string): string {

@@ -49,8 +49,8 @@ func TestMatchBeszelHostDoesNotUseGenericBuilderAlias(t *testing.T) {
 	service := &MonitoringService{hosts: []MonitorHostConfig{
 		{
 			ID:          "estar-production",
-			Name:        "e站生产机 / 旧构建机",
-			BeszelNames: []string{"xiezuomao-builder", "builder", "构建机"},
+			Name:        "e站生产机 / 边缘入口",
+			BeszelNames: []string{"xiezuomao-builder", "e站生产机", "159.75.153.53"},
 		},
 		{
 			ID:          "ops-test-builder",
