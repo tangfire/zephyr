@@ -51,6 +51,11 @@ The bundled `examples/` folder contains:
 - `monitor-hosts.generic.json`: local + remote host monitoring example
 - `tasks.novelcat.json`: our studio-specific migration example, intentionally outside the app defaults
 
+## Operations Docs
+
+- [Architecture](docs/ops-architecture.md): how Zephyr, Woodpecker, Beszel, Grafana, Loki, and managed machines fit together.
+- [Migration Runbook](docs/migration-runbook.md): how to move Zephyr to a dedicated operations/build machine and connect production or test hosts.
+
 ## Required Secrets
 
 At minimum, set these in `.env`:
