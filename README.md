@@ -105,7 +105,9 @@ Task example:
       "variables": {
         "DEPLOY_ACTION": "deploy",
         "ZEPHYR_PROJECT_ID": "app",
-        "ZEPHYR_PROJECT_NAME": "业务服务"
+        "ZEPHYR_PROJECT_NAME": "业务服务",
+        "ZEPHYR_DEPLOY_MARKER_PATH": "/opt/your-service/.deploy/current-source-sha",
+        "ZEPHYR_DEPLOY_VERIFY_URL": "http://127.0.0.1:8080/healthz"
       }
     }
   ]
@@ -113,6 +115,7 @@ Task example:
 ```
 
 Use the same `ZEPHYR_PROJECT_ID` for deploy and rollback tasks so the project status table can merge them into one service row.
+Set `ZEPHYR_DEPLOY_MARKER_PATH` and/or `ZEPHYR_DEPLOY_VERIFY_URL` when possible. Zephyr will then show a deployment as verified only after the marker commit matches the successful pipeline and the health endpoint returns 2xx/3xx.
 
 ## Zephyr Self Deploy
 

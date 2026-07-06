@@ -215,12 +215,12 @@ function DeploymentVersionList({ rows, nowMs }: { rows: DeploymentStatus[]; nowM
             title={
               <Space wrap>
                 <Text strong>{row.name}</Text>
-                <Tag color={statusColors[row.latest_status || row.last_status] || "default"}>{statusText(row.latest_status || row.last_status)}</Tag>
+                <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
               </Space>
             }
             description={
               <Text type="secondary">
-                {row.current_branch ? `${row.current_branch} · ${(row.current_commit || "").slice(0, 8) || "-"} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : "暂无成功部署"}
+                {deploymentVersionText(row, nowMs)}
               </Text>
             }
           />
@@ -717,15 +717,20 @@ function DeploymentStatusTable({
       render: (_, row) => (
         <Space direction="vertical" size={0}>
           {row.current_branch ? (
-            <Space size={6}>
+            <Space size={6} wrap>
               <Tag color={row.current_branch === row.configured_branch ? "green" : "gold"}>{row.current_branch}</Tag>
               {row.current_branch !== row.configured_branch && <Text type="warning">与配置不同</Text>}
+              <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
             </Space>
           ) : (
             <Tag>暂无成功部署</Tag>
           )}
-          <Text code={Boolean(row.current_commit)}>{(row.current_commit || "").slice(0, 8) || "-"}</Text>
+          <Text code={Boolean(row.current_commit)}>{deploymentCommitLine(row)}</Text>
+          {row.actual_commit && !commitLooksSame(row.actual_commit, row.current_commit) && (
+            <Text type="warning">实际：{row.actual_commit.slice(0, 8)}</Text>
+          )}
           <Text type="secondary">{row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}`}</Text>
+          {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{row.deploy_verify_message}</Text>}
         </Space>
       )
     },
@@ -808,11 +813,12 @@ function DeploymentStatusTable({
             ].filter(Boolean)}
           >
             <List.Item.Meta
-              title={<Space><Text strong>{row.name}</Text><Tag color={statusColors[row.latest_status || row.last_status] || "default"}>{statusText(row.latest_status || row.last_status)}</Tag></Space>}
+              title={<Space><Text strong>{row.name}</Text><Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag></Space>}
               description={
                 <Space direction="vertical" size={4} className="side-stack">
                   <Text type="secondary">{row.repo_name || `Repo ${row.repo_id}`} · 配置 {row.configured_branch || "main"}</Text>
-                  <Text>{row.current_branch ? `已部署 ${row.current_branch} · ${(row.current_commit || "").slice(0, 8) || "-"}` : "暂无成功部署"}</Text>
+                  <Text>{deploymentVersionText(row, nowMs)}</Text>
+                  {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{row.deploy_verify_message}</Text>}
                   <Text type="secondary">
                     最近执行：{row.latest_action || "-"} · {row.latest_at ? `${formatUnixTime(row.latest_at)} · ${deployedAgeText(row.latest_at, nowMs)}` : "-"}
                   </Text>
@@ -2389,7 +2395,7 @@ function TaskConfigView({
 
 export function Docs({ state }: { state: StateResponse }) {
   const data = [
-    ["部署任务", "Woodpecker Repo ID / 默认分支", "DEPLOY_ACTION=deploy，建议设置 ZEPHYR_PROJECT_ID"],
+    ["部署任务", "Woodpecker Repo ID / 默认分支", "DEPLOY_ACTION=deploy，建议设置 ZEPHYR_PROJECT_ID、ZEPHYR_DEPLOY_MARKER_PATH、ZEPHYR_DEPLOY_VERIFY_URL"],
     ["回退任务", "同一 Repo / 同一项目 ID", "DEPLOY_ACTION=rollback，确认词建议 ROLLBACK"],
     ["清理任务", "按项目自定义", "DEPLOY_ACTION=cleanup 或 disk-cleanup，确认词建议 CLEAN"],
     ["基础设施入口", "ZEPHYR_LINKS_JSON", "配置额外外部系统入口"],
@@ -2701,6 +2707,58 @@ function statusText(status?: string): string {
   if (status === "failure" || status === "error") return "失败";
   if (status === "killed") return "已取消";
   return status || "-";
+}
+
+function deployVerifyColor(row: DeploymentStatus): string {
+  if (!row.current_commit) return "default";
+  if (row.deploy_verified) return "success";
+  switch (row.deploy_verify_status) {
+    case "pipeline_only":
+      return "gold";
+    case "marker_mismatch":
+    case "marker_missing":
+    case "health_failed":
+      return "error";
+    default:
+      return row.last_status === "success" ? "gold" : statusColors[row.last_status] || "default";
+  }
+}
+
+function deployVerifyText(row: DeploymentStatus): string {
+  if (!row.current_commit) return "未部署";
+  if (row.deploy_verified) return "已验证";
+  switch (row.deploy_verify_status) {
+    case "pipeline_only":
+      return "仅流水线";
+    case "marker_mismatch":
+      return "版本不一致";
+    case "marker_missing":
+      return "未落地";
+    case "health_failed":
+      return "健康失败";
+    default:
+      return row.last_status === "success" ? "待验证" : statusText(row.last_status);
+  }
+}
+
+function deploymentVersionText(row: DeploymentStatus, nowMs: number): string {
+  if (!row.current_branch) return "暂无成功部署";
+  const label = row.deploy_verified ? "已验证" : row.deploy_verify_status === "pipeline_only" ? "流水线成功" : "待确认";
+  const age = row.last_deployed_at ? ` · ${deployedAgeText(row.last_deployed_at, nowMs)}` : "";
+  return `${label} ${row.current_branch} · ${(row.current_commit || "").slice(0, 8) || "-"}${age}`;
+}
+
+function deploymentCommitLine(row: DeploymentStatus): string {
+  if (!row.current_commit) return "-";
+  if (row.deploy_verified) return row.current_commit.slice(0, 8);
+  return `流水线 ${row.current_commit.slice(0, 8)}`;
+}
+
+function commitLooksSame(left?: string, right?: string): boolean {
+  const a = (left || "").trim().toLowerCase();
+  const b = (right || "").trim().toLowerCase();
+  if (!a || !b) return false;
+  return a.startsWith(b) || b.startsWith(a);
 }
 
 export function canRunTask(user: User, task: Task): boolean {

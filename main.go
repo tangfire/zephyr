@@ -240,33 +240,38 @@ type WoodpeckerRepoSaveRequest struct {
 }
 
 type DeploymentStatus struct {
-	ID                 string            `json:"id"`
-	Name               string            `json:"name"`
-	Group              string            `json:"group"`
-	RepoID             int               `json:"repo_id"`
-	RepoName           string            `json:"repo_name"`
-	ConfiguredBranch   string            `json:"configured_branch"`
-	CurrentBranch      string            `json:"current_branch"`
-	CurrentCommit      string            `json:"current_commit"`
-	LastAction         string            `json:"last_action"`
-	LastStatus         string            `json:"last_status"`
-	LastDeployedAt     int64             `json:"last_deployed_at"`
-	Pipeline           int64             `json:"pipeline"`
-	TriggeredBy        string            `json:"triggered_by,omitempty"`
-	TriggeredAt        string            `json:"triggered_at,omitempty"`
-	Variables          map[string]string `json:"variables,omitempty"`
-	LatestAction       string            `json:"latest_action,omitempty"`
-	LatestStatus       string            `json:"latest_status,omitempty"`
-	LatestBranch       string            `json:"latest_branch,omitempty"`
-	LatestCommit       string            `json:"latest_commit,omitempty"`
-	LatestAt           int64             `json:"latest_at,omitempty"`
-	LatestPipeline     int64             `json:"latest_pipeline,omitempty"`
-	LatestTriggeredBy  string            `json:"latest_triggered_by,omitempty"`
-	PreviousAction     string            `json:"previous_action,omitempty"`
-	PreviousBranch     string            `json:"previous_branch,omitempty"`
-	PreviousCommit     string            `json:"previous_commit,omitempty"`
-	PreviousDeployedAt int64             `json:"previous_deployed_at,omitempty"`
-	PreviousPipeline   int64             `json:"previous_pipeline,omitempty"`
+	ID                  string            `json:"id"`
+	Name                string            `json:"name"`
+	Group               string            `json:"group"`
+	RepoID              int               `json:"repo_id"`
+	RepoName            string            `json:"repo_name"`
+	ConfiguredBranch    string            `json:"configured_branch"`
+	CurrentBranch       string            `json:"current_branch"`
+	CurrentCommit       string            `json:"current_commit"`
+	LastAction          string            `json:"last_action"`
+	LastStatus          string            `json:"last_status"`
+	LastDeployedAt      int64             `json:"last_deployed_at"`
+	Pipeline            int64             `json:"pipeline"`
+	TriggeredBy         string            `json:"triggered_by,omitempty"`
+	TriggeredAt         string            `json:"triggered_at,omitempty"`
+	Variables           map[string]string `json:"variables,omitempty"`
+	DeployVerified      bool              `json:"deploy_verified"`
+	DeployVerifyStatus  string            `json:"deploy_verify_status,omitempty"`
+	DeployVerifyMessage string            `json:"deploy_verify_message,omitempty"`
+	ActualCommit        string            `json:"actual_commit,omitempty"`
+	HealthURL           string            `json:"health_url,omitempty"`
+	LatestAction        string            `json:"latest_action,omitempty"`
+	LatestStatus        string            `json:"latest_status,omitempty"`
+	LatestBranch        string            `json:"latest_branch,omitempty"`
+	LatestCommit        string            `json:"latest_commit,omitempty"`
+	LatestAt            int64             `json:"latest_at,omitempty"`
+	LatestPipeline      int64             `json:"latest_pipeline,omitempty"`
+	LatestTriggeredBy   string            `json:"latest_triggered_by,omitempty"`
+	PreviousAction      string            `json:"previous_action,omitempty"`
+	PreviousBranch      string            `json:"previous_branch,omitempty"`
+	PreviousCommit      string            `json:"previous_commit,omitempty"`
+	PreviousDeployedAt  int64             `json:"previous_deployed_at,omitempty"`
+	PreviousPipeline    int64             `json:"previous_pipeline,omitempty"`
 }
 
 type StateResponse struct {
@@ -2311,9 +2316,16 @@ type deploymentTarget struct {
 	Group string
 }
 
+type deploymentVerifyConfig struct {
+	MarkerPath string
+	HealthURL  string
+	Timeout    time.Duration
+}
+
 func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]Pipeline) []DeploymentStatus {
 	taskByID := map[string]Task{}
 	targets := map[string]*DeploymentStatus{}
+	verifyConfigs := map[string]deploymentVerifyConfig{}
 	order := []string{}
 
 	for _, task := range tasks {
@@ -2321,6 +2333,9 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 		target, ok := deploymentTargetFromTask(task)
 		if !ok {
 			continue
+		}
+		if cfg := deploymentVerifyConfigFromVariables(task.Variables); cfg.hasChecks() {
+			verifyConfigs[target.ID] = mergeDeploymentVerifyConfig(verifyConfigs[target.ID], cfg)
 		}
 		if _, exists := targets[target.ID]; !exists {
 			status := DeploymentStatus{
@@ -2397,6 +2412,10 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 				status.PreviousPipeline = pipeline.Number
 			}
 		}
+	}
+
+	for id, status := range targets {
+		applyDeploymentVerification(status, verifyConfigs[id])
 	}
 
 	result := make([]DeploymentStatus, 0, len(order))
@@ -2545,12 +2564,193 @@ func isMaintenanceAction(action string) bool {
 	if action == "" {
 		return false
 	}
-	for _, needle := range []string{"cleanup", "clean", "disk", "ps", "logs", "status", "inspect", "observability", "zefire", "woodpecker-ui-patch"} {
+	for _, needle := range []string{"cleanup", "clean", "disk", "ps", "logs", "status", "restart", "reload", "inspect", "observability", "zefire", "woodpecker-ui-patch"} {
 		if strings.Contains(action, needle) {
 			return true
 		}
 	}
 	return false
+}
+
+func deploymentVerifyConfigFromVariables(values map[string]string) deploymentVerifyConfig {
+	timeoutSeconds := parsePositiveInt(variableValue(values, "ZEPHYR_DEPLOY_VERIFY_TIMEOUT_SECONDS"))
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = parsePositiveInt(variableValue(values, "DEPLOY_VERIFY_TIMEOUT_SECONDS"))
+	}
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 2
+	}
+	if timeoutSeconds > 15 {
+		timeoutSeconds = 15
+	}
+	return deploymentVerifyConfig{
+		MarkerPath: firstNonEmptyString(
+			variableValue(values, "ZEPHYR_DEPLOY_MARKER_PATH"),
+			variableValue(values, "DEPLOY_MARKER_PATH"),
+		),
+		HealthURL: firstNonEmptyString(
+			variableValue(values, "ZEPHYR_DEPLOY_VERIFY_URL"),
+			variableValue(values, "ZEPHYR_HEALTH_URL"),
+			variableValue(values, "DEPLOY_HEALTH_URL"),
+			variableValue(values, "HEALTH_URL"),
+		),
+		Timeout: time.Duration(timeoutSeconds) * time.Second,
+	}
+}
+
+func (cfg deploymentVerifyConfig) hasChecks() bool {
+	return cfg.MarkerPath != "" || cfg.HealthURL != ""
+}
+
+func mergeDeploymentVerifyConfig(current, next deploymentVerifyConfig) deploymentVerifyConfig {
+	if next.MarkerPath != "" {
+		current.MarkerPath = next.MarkerPath
+	}
+	if next.HealthURL != "" {
+		current.HealthURL = next.HealthURL
+	}
+	if next.Timeout > 0 {
+		current.Timeout = next.Timeout
+	}
+	return current
+}
+
+func applyDeploymentVerification(status *DeploymentStatus, cfg deploymentVerifyConfig) {
+	if status == nil {
+		return
+	}
+	if status.CurrentCommit == "" {
+		status.DeployVerified = false
+		status.DeployVerifyStatus = "not_deployed"
+		status.DeployVerifyMessage = "还没有成功流水线记录"
+		return
+	}
+	if !cfg.hasChecks() {
+		status.DeployVerified = false
+		status.DeployVerifyStatus = "pipeline_only"
+		status.DeployVerifyMessage = "仅确认 Woodpecker 流水线成功，尚未配置服务健康或版本落地校验"
+		return
+	}
+
+	status.HealthURL = cfg.HealthURL
+	issues := []string{}
+	markerChecked := false
+	healthChecked := false
+
+	if cfg.MarkerPath != "" {
+		markerChecked = true
+		actualCommit, err := readDeploymentMarker(cfg.MarkerPath)
+		status.ActualCommit = actualCommit
+		if err != nil {
+			issues = append(issues, "版本 marker 读取失败："+err.Error())
+			if status.DeployVerifyStatus == "" {
+				status.DeployVerifyStatus = "marker_missing"
+			}
+		} else if actualCommit == "" {
+			issues = append(issues, "版本 marker 为空")
+			if status.DeployVerifyStatus == "" {
+				status.DeployVerifyStatus = "marker_missing"
+			}
+		} else if !deploymentCommitMatches(actualCommit, status.CurrentCommit) {
+			issues = append(issues, fmt.Sprintf("实际版本 %s 与流水线版本 %s 不一致", shortCommit(actualCommit), shortCommit(status.CurrentCommit)))
+			if status.DeployVerifyStatus == "" {
+				status.DeployVerifyStatus = "marker_mismatch"
+			}
+		}
+	}
+
+	if cfg.HealthURL != "" {
+		healthChecked = true
+		if err := probeDeploymentHealth(cfg.HealthURL, cfg.Timeout); err != nil {
+			issues = append(issues, "健康检查失败："+err.Error())
+			if status.DeployVerifyStatus == "" {
+				status.DeployVerifyStatus = "health_failed"
+			}
+		}
+	}
+
+	if len(issues) > 0 {
+		status.DeployVerified = false
+		status.DeployVerifyMessage = strings.Join(issues, "；")
+		return
+	}
+
+	status.DeployVerified = true
+	status.DeployVerifyStatus = "verified"
+	switch {
+	case markerChecked && healthChecked:
+		status.DeployVerifyMessage = "版本 marker 与服务健康检查均已通过"
+	case markerChecked:
+		status.DeployVerifyMessage = "版本 marker 已确认"
+	case healthChecked:
+		status.DeployVerifyMessage = "服务健康检查已通过"
+	default:
+		status.DeployVerified = false
+		status.DeployVerifyStatus = "pipeline_only"
+		status.DeployVerifyMessage = "仅确认 Woodpecker 流水线成功"
+	}
+}
+
+func readDeploymentMarker(path string) (string, error) {
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	fields := strings.Fields(string(payload))
+	if len(fields) == 0 {
+		return "", nil
+	}
+	return fields[0], nil
+}
+
+func deploymentCommitMatches(actual, expected string) bool {
+	actual = strings.ToLower(strings.TrimSpace(actual))
+	expected = strings.ToLower(strings.TrimSpace(expected))
+	if actual == "" || expected == "" {
+		return false
+	}
+	return strings.HasPrefix(actual, expected) || strings.HasPrefix(expected, actual)
+}
+
+func probeDeploymentHealth(rawURL string, timeout time.Duration) error {
+	rawURL = strings.TrimSpace(rawURL)
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("unsupported health URL scheme %q", parsed.Scheme)
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	client := http.Client{Timeout: timeout}
+	resp, err := client.Get(rawURL)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func shortCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if len(commit) <= 8 {
+		return commit
+	}
+	return commit[:8]
+}
+
+func parsePositiveInt(value string) int {
+	parsed, err := strconv.Atoi(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return 0
+	}
+	return parsed
 }
 
 func variableValue(values map[string]string, key string) string {
