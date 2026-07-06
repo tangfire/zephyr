@@ -7,13 +7,15 @@ body {
   min-width: 320px;
   min-height: 100vh;
   color: #1f2a22;
-  background: #f5f8f2;
+  background: #f6f8f4;
 }
 
 .app-layout {
   position: relative;
   min-height: 100vh;
-  background: #f5f8f2;
+  background:
+    linear-gradient(180deg, rgba(246, 250, 242, 0.78), rgba(247, 248, 246, 0.96) 260px),
+    #f6f8f4;
 }
 
 .app-header {
@@ -54,12 +56,29 @@ body {
   align-self: flex-start;
   height: calc(100vh - 78px);
   padding: 14px 10px;
-  background: #fff !important;
+  background: rgba(255, 255, 255, 0.82) !important;
   border-right: 1px solid #dfe8d9;
 }
 
 .app-sidebar .ant-menu {
   border-inline-end: 0 !important;
+}
+
+.app-sidebar .ant-menu-item {
+  height: 40px;
+  margin: 4px 4px;
+  border-radius: 8px;
+}
+
+.app-sidebar .ant-menu-item-selected {
+  color: #285915 !important;
+  background: #edf5e8 !important;
+  font-weight: 700;
+}
+
+.app-sidebar .ant-menu-item:focus-visible {
+  outline: 2px solid rgba(61, 114, 29, 0.28);
+  outline-offset: 2px;
 }
 
 .app-content {
@@ -241,7 +260,7 @@ body {
 }
 
 .overview-stat-group .ant-pro-card {
-  min-height: 106px;
+  min-height: 96px;
 }
 
 .overview-split-card .ant-pro-card-body {
@@ -250,7 +269,44 @@ body {
 
 .overview-version-list .ant-list-item,
 .overview-pipeline-list .ant-list-item {
-  padding: 10px 0;
+  padding: 9px 0;
+}
+
+.overview-version-list .ant-list-item-meta-title,
+.overview-pipeline-list .ant-list-item-meta-title {
+  margin-bottom: 2px !important;
+}
+
+.deployment-version-cell {
+  max-width: 270px;
+}
+
+.deployment-verify-note,
+.pipeline-variable-hint {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
+
+.desktop-deployment-table .ant-table-cell,
+.desktop-pipeline-table .ant-table-cell {
+  vertical-align: top;
+}
+
+.desktop-deployment-table .ant-table-thead > tr > th,
+.desktop-pipeline-table .ant-table-thead > tr > th,
+.desktop-monitor-system-table .ant-table-thead > tr > th,
+.desktop-monitor-container-table .ant-table-thead > tr > th {
+  color: #586157;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.desktop-pipeline-table .ant-progress-line {
+  min-width: 72px;
 }
 
 .page-head-card .ant-card-body {
@@ -528,6 +584,12 @@ body {
   border-color: #e7eaee;
 }
 
+.ant-card,
+.ant-pro-card,
+.ant-table-wrapper .ant-table {
+  box-shadow: 0 1px 0 rgba(31, 42, 34, 0.03);
+}
+
 .ant-table-wrapper .ant-table {
   border-radius: 8px;
 }
@@ -618,8 +680,8 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #7cb758;
-  box-shadow: 0 0 0 7px rgba(124, 183, 88, 0.14);
+  background: rgba(124, 183, 88, 0.75);
+  box-shadow: 0 0 0 6px rgba(124, 183, 88, 0.1);
   animation: node-drift 4.8s ease-in-out infinite;
 }
 
@@ -708,8 +770,8 @@ body {
   }
 
   .header-logo {
-    width: 38px;
-    height: 38px;
+    width: 34px;
+    height: 34px;
   }
 
   .mobile-nav-button {
@@ -814,10 +876,30 @@ body {
   .overview-hero {
     align-items: flex-start;
     flex-direction: column;
+    gap: 14px;
   }
 
-  .overview-split-card .ant-pro-card-col {
+  .overview-hero > .ant-space,
+  .overview-hero > div + .ant-space {
+    width: 100%;
+  }
+
+  .overview-hero > div + .ant-space .ant-btn {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .overview-split-card > .ant-pro-card-body {
+    display: block !important;
+  }
+
+  .overview-split-card .ant-pro-card-col,
+  .overview-split-card .ant-pro-card {
     width: 100% !important;
+  }
+
+  .overview-split-card .ant-pro-card-col + .ant-pro-card-col {
+    border-top: 1px solid #edf1e9;
+    border-left: 0 !important;
   }
 
   .home-resource-metrics {
@@ -841,5 +923,46 @@ body {
   .metric-pill .compact-meter {
     width: 40px;
     min-width: 40px;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    gap: 10px;
+  }
+
+  .app-header .eyebrow {
+    display: none;
+  }
+
+  .header-title {
+    font-size: 20px !important;
+  }
+
+  .user-pill {
+    display: none;
+  }
+
+  .overview-hero-card .ant-pro-card-body {
+    padding: 16px !important;
+  }
+
+  .overview-stat-group {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-stat-group .ant-pro-card {
+    min-height: 86px;
+  }
+
+  .mobile-deployment-list .ant-list-item,
+  .mobile-pipeline-list .ant-list-item {
+    display: block;
+  }
+
+  .mobile-deployment-list .ant-list-item-action,
+  .mobile-pipeline-list .ant-list-item-action {
+    margin: 10px 0 0;
   }
 }

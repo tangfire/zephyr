@@ -191,7 +191,7 @@ export function OverviewPage({
 
       <ProCard split="vertical" gutter={16} className="overview-split-card">
         <ProCard title="线上版本" extra={<Button type="link" onClick={() => onNavigate("deploy")}>进入部署</Button>}>
-          <DeploymentVersionList rows={deploymentStatuses.slice(0, 6)} nowMs={nowMs} />
+          <DeploymentVersionList rows={overviewDeploymentRows(deploymentStatuses, 6)} nowMs={nowMs} />
         </ProCard>
         <ProCard title="近期流水线" extra={<Button type="link" onClick={() => onNavigate("pipelines")}>查看全部</Button>}>
           <PipelineActivityList rows={attentionPipelines} nowMs={nowMs} onInspect={onInspectPipeline} />
@@ -231,7 +231,7 @@ function DeploymentVersionList({ rows, nowMs }: { rows: DeploymentStatus[]; nowM
 }
 
 function PipelineActivityList({ rows, nowMs, onInspect }: { rows: Pipeline[]; nowMs: number; onInspect: (row: Pipeline) => void }) {
-  if (!rows.length) return <Alert type="success" showIcon message="24 小时内没有需要关注的流水线" />;
+  if (!rows.length) return <Alert type="success" showIcon message="当前没有需要处理的流水线" description="已被后续成功覆盖的历史失败不会在总览里持续占位。" />;
   return (
     <List
       className="overview-pipeline-list"
@@ -700,6 +700,7 @@ function DeploymentStatusTable({
   onRun: (task: Task) => void;
 }) {
   const triggeringTaskIDSet = useMemo(() => new Set(triggeringTaskIds), [triggeringTaskIds]);
+  const displayRows = useMemo(() => sortDeploymentRows(rows), [rows]);
   const columns: ProColumns<DeploymentStatus>[] = [
     {
       title: "项目",
@@ -715,7 +716,7 @@ function DeploymentStatusTable({
       title: "线上版本",
       width: 250,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={2} className="deployment-version-cell">
           {row.current_branch ? (
             <Space size={6} wrap>
               <Tag color={row.current_branch === row.configured_branch ? "green" : "gold"}>{row.current_branch}</Tag>
@@ -730,7 +731,11 @@ function DeploymentStatusTable({
             <Text type="warning">实际：{row.actual_commit.slice(0, 8)}</Text>
           )}
           <Text type="secondary">{row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}`}</Text>
-          {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{row.deploy_verify_message}</Text>}
+          {row.deploy_verify_message && (
+            <Tooltip title={row.deploy_verify_message}>
+              <Text className="deployment-verify-note" type={row.deploy_verified ? "secondary" : "warning"}>{shortDeploymentVerifyMessage(row)}</Text>
+            </Tooltip>
+          )}
         </Space>
       )
     },
@@ -795,7 +800,7 @@ function DeploymentStatusTable({
         rowKey={(row) => row.id}
         size="small"
         columns={columns}
-        dataSource={rows}
+        dataSource={displayRows}
         search={false}
         options={false}
         tableAlertRender={false}
@@ -804,7 +809,7 @@ function DeploymentStatusTable({
       />
       <List
         className="mobile-deployment-list"
-        dataSource={rows}
+        dataSource={displayRows}
         renderItem={(row) => (
           <List.Item
             actions={[
@@ -818,7 +823,7 @@ function DeploymentStatusTable({
                 <Space direction="vertical" size={4} className="side-stack">
                   <Text type="secondary">{row.repo_name || `Repo ${row.repo_id}`} · 配置 {row.configured_branch || "main"}</Text>
                   <Text>{deploymentVersionText(row, nowMs)}</Text>
-                  {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{row.deploy_verify_message}</Text>}
+                  {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{shortDeploymentVerifyMessage(row)}</Text>}
                   <Text type="secondary">
                     最近执行：{row.latest_action || "-"} · {row.latest_at ? `${formatUnixTime(row.latest_at)} · ${deployedAgeText(row.latest_at, nowMs)}` : "-"}
                   </Text>
@@ -872,7 +877,11 @@ function PipelineTable({
       render: (_, row) => (
         <Space direction="vertical" size={0}>
           <Text>{pipelineTaskText(row)}</Text>
-          {pipelineVariableHint(row) && <Text type="secondary">{pipelineVariableHint(row)}</Text>}
+          {pipelineVariableHint(row) && (
+            <Tooltip title={pipelineVariableHint(row)}>
+              <Text type="secondary" className="pipeline-variable-hint">{pipelineVariableHint(row)}</Text>
+            </Tooltip>
+          )}
         </Space>
       )
     },
@@ -894,7 +903,7 @@ function PipelineTable({
     {
       title: "状态",
       width: 92,
-      render: (_, row) => <Tag color={statusColors[row.status] || "default"}>{row.status}</Tag>
+      render: (_, row) => <Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag>
     },
     {
       title: "进度",
@@ -950,7 +959,7 @@ function PipelineTable({
             ].filter(Boolean)}
           >
             <List.Item.Meta
-              title={<Space><Text strong>{row.repo_name} #{row.number}</Text><Tag color={statusColors[row.status] || "default"}>{row.status}</Tag></Space>}
+              title={<Space><Text strong>{row.repo_name} #{row.number}</Text><Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag></Space>}
               description={
                 <Space direction="vertical" size={4} className="side-stack">
                   <Text type="secondary">{row.branch || "-"} · {(row.commit || "").slice(0, 8) || "-"}</Text>
@@ -2438,12 +2447,42 @@ export function flattenPipelines(state: StateResponse | null): Pipeline[] {
 }
 
 export function recentFailedPipelineCount(rows: Pipeline[], nowMs: number): number {
-  return rows.filter((row) => isRecentFailedPipeline(row, nowMs)).length;
+  return rows.filter((row) => isRecentFailedPipeline(row, nowMs) && !hasNewerSuccessfulPipeline(rows, row)).length;
 }
 
 function overviewPipelineRows(rows: Pipeline[], nowMs: number, limit: number): Pipeline[] {
   return rows
-    .filter((row) => ["running", "pending"].includes(row.status) || isRecentFailedPipeline(row, nowMs))
+    .filter((row) => ["running", "pending"].includes(row.status) || (isRecentFailedPipeline(row, nowMs) && !hasNewerSuccessfulPipeline(rows, row)))
+    .slice(0, limit);
+}
+
+function hasNewerSuccessfulPipeline(rows: Pipeline[], failedRow: Pipeline): boolean {
+  const failedAt = pipelineSortTime(failedRow);
+  const failedKeys = pipelineAttentionKeys(failedRow);
+  if (!failedAt || !failedKeys.length) return false;
+  return rows.some((row) => {
+    if (row.status !== "success") return false;
+    if (pipelineSortTime(row) <= failedAt) return false;
+    const successKeys = pipelineAttentionKeys(row);
+    return successKeys.some((key) => failedKeys.includes(key));
+  });
+}
+
+function pipelineAttentionKeys(row: Pipeline): string[] {
+  const repo = row.repo_id || 0;
+  const variables = row.variables || {};
+  const keys = [
+    row.zefire_task_id ? `${repo}:task:${row.zefire_task_id}` : "",
+    variables.ZEPHYR_PROJECT_ID ? `${repo}:project:${variables.ZEPHYR_PROJECT_ID}` : "",
+    variables.DEPLOY_ACTION ? `${repo}:action:${variables.DEPLOY_ACTION}:${variables.DEPLOY_TARGET || ""}:${variables.SOURCE_BRANCH || row.branch || ""}` : "",
+    `${repo}:text:${pipelineTaskText(row)}:${row.branch || ""}`
+  ];
+  return Array.from(new Set(keys.filter(Boolean)));
+}
+
+function overviewDeploymentRows(rows: DeploymentStatus[], limit: number): DeploymentStatus[] {
+  return sortDeploymentRows(rows)
+    .filter((row) => row.current_branch || deploymentAttentionRank(row) <= 1)
     .slice(0, limit);
 }
 
@@ -2748,10 +2787,35 @@ function deploymentVersionText(row: DeploymentStatus, nowMs: number): string {
   return `${label} ${row.current_branch} · ${(row.current_commit || "").slice(0, 8) || "-"}${age}`;
 }
 
+function sortDeploymentRows(rows: DeploymentStatus[]): DeploymentStatus[] {
+  return [...rows].sort((a, b) => {
+    const rank = deploymentAttentionRank(a) - deploymentAttentionRank(b);
+    if (rank !== 0) return rank;
+    const time = (b.last_deployed_at || b.latest_at || 0) - (a.last_deployed_at || a.latest_at || 0);
+    if (time !== 0) return time;
+    return (a.name || "").localeCompare(b.name || "", "zh-CN");
+  });
+}
+
+function deploymentAttentionRank(row: DeploymentStatus): number {
+  if (row.current_commit && !row.deploy_verified && row.deploy_verify_status !== "pipeline_only") return 0;
+  if (row.latest_status === "failure" || row.latest_status === "error" || row.last_status === "failure" || row.last_status === "error") return 1;
+  if (row.deploy_verified) return 2;
+  if (row.current_commit) return 3;
+  return 4;
+}
+
 function deploymentCommitLine(row: DeploymentStatus): string {
   if (!row.current_commit) return "-";
   if (row.deploy_verified) return row.current_commit.slice(0, 8);
   return `流水线 ${row.current_commit.slice(0, 8)}`;
+}
+
+function shortDeploymentVerifyMessage(row: DeploymentStatus): string {
+  if (!row.deploy_verify_message) return "";
+  if (row.deploy_verified) return "版本和健康检查已通过";
+  if (row.deploy_verify_status === "pipeline_only") return "缺少部署验证配置";
+  return row.deploy_verify_message.length > 32 ? `${row.deploy_verify_message.slice(0, 32)}...` : row.deploy_verify_message;
 }
 
 function commitLooksSame(left?: string, right?: string): boolean {
