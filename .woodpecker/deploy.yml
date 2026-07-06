@@ -1,0 +1,25 @@
+when:
+  - event: manual
+
+steps:
+  - name: test-and-build
+    image: golang:1.25-alpine
+    commands:
+      - set -euo pipefail
+      - apk add --no-cache git nodejs npm
+      - go test ./...
+      - cd frontend
+      - npm ci --no-audit --no-fund
+      - npm run build
+      - cd ..
+      - mkdir -p .woodpecker-build
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o .woodpecker-build/zephyr .
+
+  - name: deploy
+    image: docker:28-cli
+    commands:
+      - set -euo pipefail
+      - sh scripts/deploy-zephyr-local.sh
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/zephyr:/opt/zephyr
