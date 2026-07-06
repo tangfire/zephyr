@@ -39,7 +39,6 @@ services:
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
-      - --default-authentication-plugin=caching_sha2_password
     environment:
       MYSQL_DATABASE: ${ZEPHYR_DB_NAME:-zephyr}
       MYSQL_USER: ${ZEPHYR_DB_USER:-zephyr}
