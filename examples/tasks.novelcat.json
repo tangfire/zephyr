@@ -1,8 +1,8 @@
 {
   "repos": {
-    "1": "xiezuomao-novel-factory",
-    "2": "lehu-campus",
-    "3": "9router-mod"
+    "1": "tangfire/xiezuomao-novel-factory",
+    "2": "tangfire/lehu-campus",
+    "3": "2eho/9router-mod"
   },
   "tasks": [
     {
@@ -11,11 +11,28 @@
       "title": "部署产品",
       "description": "构建并蓝绿发布写书猫产品主链路。",
       "repo_id": 1,
-      "repo_name": "xiezuomao-novel-factory",
+      "repo_name": "tangfire/xiezuomao-novel-factory",
       "branch": "main",
       "risk": "normal",
       "variables": {
         "DEPLOY_ACTION": "deploy",
+        "ZEPHYR_PROJECT_ID": "xzm-product",
+        "ZEPHYR_PROJECT_NAME": "写书猫产品"
+      }
+    },
+    {
+      "id": "xzm-product-force-deploy",
+      "group": "写书猫产品",
+      "title": "强制重发产品",
+      "description": "即使源码 SHA 未变化，也重新构建并发布。",
+      "repo_id": 1,
+      "repo_name": "tangfire/xiezuomao-novel-factory",
+      "branch": "main",
+      "risk": "warning",
+      "confirm_text": "FORCE",
+      "variables": {
+        "DEPLOY_ACTION": "deploy",
+        "FORCE_DEPLOY": "1",
         "ZEPHYR_PROJECT_ID": "xzm-product",
         "ZEPHYR_PROJECT_NAME": "写书猫产品"
       }
@@ -26,7 +43,7 @@
       "title": "回退产品",
       "description": "回退到生产机记录的上一版镜像。",
       "repo_id": 1,
-      "repo_name": "xiezuomao-novel-factory",
+      "repo_name": "tangfire/xiezuomao-novel-factory",
       "branch": "main",
       "risk": "danger",
       "confirm_text": "ROLLBACK",
@@ -35,6 +52,208 @@
         "ZEPHYR_PROJECT_ID": "xzm-product",
         "ZEPHYR_PROJECT_NAME": "写书猫产品"
       }
+    },
+    {
+      "id": "xzm-site-deploy",
+      "group": "写书猫官网",
+      "title": "部署官网",
+      "description": "发布 novelcat.cloud 官网静态站。",
+      "repo_id": 1,
+      "repo_name": "tangfire/xiezuomao-novel-factory",
+      "branch": "main",
+      "risk": "normal",
+      "variables": {
+        "DEPLOY_ACTION": "site",
+        "ZEPHYR_PROJECT_ID": "xzm-site",
+        "ZEPHYR_PROJECT_NAME": "写书猫官网"
+      }
+    },
+    {
+      "id": "xzm-observability",
+      "group": "观测平台",
+      "title": "部署观测平台",
+      "description": "刷新 Grafana/Loki/Tempo/Prometheus 配置。",
+      "repo_id": 1,
+      "repo_name": "tangfire/xiezuomao-novel-factory",
+      "branch": "main",
+      "risk": "warning",
+      "confirm_text": "OBS",
+      "variables": {
+        "DEPLOY_ACTION": "observability",
+        "ZEPHYR_PROJECT_ID": "xzm-observability",
+        "ZEPHYR_PROJECT_NAME": "观测平台"
+      }
+    },
+    {
+      "id": "builder-cleanup",
+      "group": "磁盘维护",
+      "title": "清理测试/构建机",
+      "description": "清理新构建机未使用 Docker 构建缓存与安全可清理资源。",
+      "repo_id": 1,
+      "repo_name": "tangfire/xiezuomao-novel-factory",
+      "branch": "main",
+      "risk": "warning",
+      "confirm_text": "CLEAN",
+      "variables": {
+        "DEPLOY_ACTION": "disk-cleanup",
+        "CLEANUP_MODE": "deep"
+      }
+    },
+    {
+      "id": "production-cleanup",
+      "group": "磁盘维护",
+      "title": "清理写书猫生产机",
+      "description": "通过 Woodpecker SSH 到写书猫生产机执行深度安全磁盘清理。",
+      "repo_id": 1,
+      "repo_name": "tangfire/xiezuomao-novel-factory",
+      "branch": "main",
+      "risk": "danger",
+      "confirm_text": "CLEAN",
+      "variables": {
+        "DEPLOY_ACTION": "production-disk-cleanup",
+        "CLEANUP_MODE": "deep"
+      }
+    },
+    {
+      "id": "estack-deploy",
+      "group": "e站后端",
+      "title": "部署 e站",
+      "description": "部署 lehu-campus / e站后端当前分支。",
+      "repo_id": 2,
+      "repo_name": "tangfire/lehu-campus",
+      "branch": "campus-estation-cleanup",
+      "risk": "normal",
+      "variables": {
+        "DEPLOY_ACTION": "deploy",
+        "ZEPHYR_PROJECT_ID": "estack",
+        "ZEPHYR_PROJECT_NAME": "e站后端"
+      }
+    },
+    {
+      "id": "estack-rollback",
+      "group": "e站后端",
+      "title": "回退 e站",
+      "description": "回退 e站到上一版 SHA。",
+      "repo_id": 2,
+      "repo_name": "tangfire/lehu-campus",
+      "branch": "campus-estation-cleanup",
+      "risk": "danger",
+      "confirm_text": "ROLLBACK",
+      "variables": {
+        "DEPLOY_ACTION": "rollback",
+        "ZEPHYR_PROJECT_ID": "estack",
+        "ZEPHYR_PROJECT_NAME": "e站后端"
+      }
+    },
+    {
+      "id": "estack-restart",
+      "group": "e站后端",
+      "title": "重启 e站",
+      "description": "重启 e站 Docker Compose 服务。",
+      "repo_id": 2,
+      "repo_name": "tangfire/lehu-campus",
+      "branch": "campus-estation-cleanup",
+      "risk": "warning",
+      "confirm_text": "RESTART",
+      "variables": {
+        "DEPLOY_ACTION": "restart",
+        "ZEPHYR_PROJECT_ID": "estack",
+        "ZEPHYR_PROJECT_NAME": "e站后端"
+      }
+    },
+    {
+      "id": "estack-cleanup",
+      "group": "磁盘维护",
+      "title": "清理 e站缓存",
+      "description": "执行 e站流水线内置的清理任务。",
+      "repo_id": 2,
+      "repo_name": "tangfire/lehu-campus",
+      "branch": "campus-estation-cleanup",
+      "risk": "warning",
+      "confirm_text": "CLEAN",
+      "variables": {
+        "DEPLOY_ACTION": "cleanup"
+      }
+    },
+    {
+      "id": "router-builder-deploy",
+      "group": "9router · 测试/构建机",
+      "title": "部署测试/构建机 9router",
+      "description": "构建并部署测试/构建机上的 9router。",
+      "repo_id": 3,
+      "repo_name": "2eho/9router-mod",
+      "branch": "main",
+      "risk": "warning",
+      "confirm_text": "ROUTER",
+      "variables": {
+        "DEPLOY_TARGET": "builder",
+        "ZEPHYR_PROJECT_ID": "router-builder",
+        "ZEPHYR_PROJECT_NAME": "测试/构建机 9router"
+      }
+    },
+    {
+      "id": "router-builder-rollback",
+      "group": "9router · 测试/构建机",
+      "title": "回退测试/构建机 9router",
+      "description": "按指定镜像版本回退测试/构建机 9router。",
+      "repo_id": 3,
+      "repo_name": "2eho/9router-mod",
+      "branch": "main",
+      "risk": "danger",
+      "confirm_text": "ROLLBACK",
+      "variables": {
+        "DEPLOY_TARGET": "builder",
+        "ZEPHYR_PROJECT_ID": "router-builder",
+        "ZEPHYR_PROJECT_NAME": "测试/构建机 9router"
+      },
+      "inputs": [
+        {
+          "name": "ROLLBACK_VERSION",
+          "label": "回退版本",
+          "placeholder": "例如 75-f5ae1371",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "router-prod-deploy",
+      "group": "9router · 生产机",
+      "title": "部署生产机 9router",
+      "description": "构建镜像后发布到生产机 9router，供写书猫生产环境内部调用。",
+      "repo_id": 3,
+      "repo_name": "2eho/9router-mod",
+      "branch": "main",
+      "risk": "danger",
+      "confirm_text": "PROD",
+      "variables": {
+        "DEPLOY_TARGET": "production",
+        "ZEPHYR_PROJECT_ID": "router-production",
+        "ZEPHYR_PROJECT_NAME": "生产机 9router"
+      }
+    },
+    {
+      "id": "router-prod-rollback",
+      "group": "9router · 生产机",
+      "title": "回退生产机 9router",
+      "description": "把生产机 9router 回退到指定镜像版本。",
+      "repo_id": 3,
+      "repo_name": "2eho/9router-mod",
+      "branch": "main",
+      "risk": "danger",
+      "confirm_text": "ROLLBACK",
+      "variables": {
+        "DEPLOY_TARGET": "production",
+        "ZEPHYR_PROJECT_ID": "router-production",
+        "ZEPHYR_PROJECT_NAME": "生产机 9router"
+      },
+      "inputs": [
+        {
+          "name": "ROLLBACK_VERSION",
+          "label": "回退版本",
+          "placeholder": "例如 75-f5ae1371",
+          "required": true
+        }
+      ]
     }
   ]
 }

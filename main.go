@@ -2352,7 +2352,7 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 	for repoID, rows := range pipelines {
 		repoName := repos[repoID]
 		for _, pipeline := range rows {
-			target, configuredBranch, ok := deploymentTargetFromPipeline(repoID, repoName, pipeline, taskByID)
+			target, configuredBranch, ok := deploymentTargetFromPipeline(repoID, repoName, pipeline, taskByID, tasks)
 			if !ok {
 				continue
 			}
@@ -2423,12 +2423,23 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 	return result
 }
 
-func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline, taskByID map[string]Task) (deploymentTarget, string, bool) {
+func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline, taskByID map[string]Task, tasks []Task) (deploymentTarget, string, bool) {
 	if pipeline.ZefireTaskID != "" {
 		if task, ok := taskByID[pipeline.ZefireTaskID]; ok {
 			target, targetOK := deploymentTargetFromTask(task)
 			return target, task.Branch, targetOK
 		}
+	}
+	if task, ok := deploymentTaskFromPipeline(repoID, pipeline, tasks); ok {
+		target, targetOK := deploymentTargetFromTask(task)
+		return target, task.Branch, targetOK
+	}
+	action := variableValue(pipeline.Variables, "DEPLOY_ACTION")
+	if action == "" && len(pipeline.Variables) == 0 {
+		return deploymentTarget{}, "", false
+	}
+	if isMaintenanceAction(action) {
+		return deploymentTarget{}, "", false
 	}
 	task := Task{
 		ID:        fallbackText(pipeline.ZefireTaskID, fmt.Sprintf("repo-%d-pipeline", repoID)),
@@ -2441,6 +2452,60 @@ func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline
 	}
 	target, ok := deploymentTargetFromTask(task)
 	return target, task.Branch, ok
+}
+
+func deploymentTaskFromPipeline(repoID int, pipeline Pipeline, tasks []Task) (Task, bool) {
+	bestScore := 0
+	var best Task
+	for _, task := range tasks {
+		if task.RepoID != repoID || task.ExternalURL != "" {
+			continue
+		}
+		if task.Branch != "" && pipeline.Branch != "" && task.Branch != pipeline.Branch {
+			continue
+		}
+		score := deploymentVariableMatchScore(task.Variables, pipeline.Variables)
+		if score > bestScore {
+			bestScore = score
+			best = task
+		}
+	}
+	return best, bestScore > 0
+}
+
+func deploymentVariableMatchScore(taskVariables map[string]string, pipelineVariables map[string]string) int {
+	if len(taskVariables) == 0 || len(pipelineVariables) == 0 {
+		return 0
+	}
+	score := 0
+	for key, taskValue := range taskVariables {
+		if isProjectMetadataVariable(key) {
+			continue
+		}
+		taskValue = strings.TrimSpace(taskValue)
+		if taskValue == "" {
+			continue
+		}
+		if pipelineValue := variableValue(pipelineVariables, key); pipelineValue != "" && pipelineValue == taskValue {
+			score += deploymentVariableWeight(key)
+		}
+	}
+	return score
+}
+
+func isProjectMetadataVariable(key string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(key))
+	return strings.HasPrefix(upper, "ZEPHYR_PROJECT_")
+}
+
+func deploymentVariableWeight(key string) int {
+	upper := strings.ToUpper(strings.TrimSpace(key))
+	switch upper {
+	case "DEPLOY_ACTION", "DEPLOY_TARGET":
+		return 10
+	default:
+		return 1
+	}
 }
 
 func deploymentTargetFromTask(task Task) (deploymentTarget, bool) {
@@ -2491,7 +2556,7 @@ func isMaintenanceAction(action string) bool {
 	if action == "" {
 		return false
 	}
-	for _, needle := range []string{"cleanup", "clean", "disk"} {
+	for _, needle := range []string{"cleanup", "clean", "disk", "ps", "logs", "status", "inspect", "observability", "zefire", "woodpecker-ui-patch"} {
 		if strings.Contains(action, needle) {
 			return true
 		}

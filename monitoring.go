@@ -201,9 +201,19 @@ func (m *MonitoringService) collect(ctx context.Context, now time.Time) Monitori
 
 	source := "degraded"
 	reasons := []string{}
-	if beszelMatched > 0 {
+	beszelActive := 0
+	sshFallbackActive := 0
+	for _, host := range hosts {
+		switch host.Source {
+		case "beszel":
+			beszelActive++
+		case "ssh_fallback":
+			sshFallbackActive++
+		}
+	}
+	if beszelActive > 0 {
 		source = "beszel"
-	} else if sshSuccess > 0 {
+	} else if sshFallbackActive > 0 || sshSuccess > 0 {
 		source = "ssh_fallback"
 	}
 	if beszelErr != nil {
@@ -783,11 +793,25 @@ func mergeSSHHost(host *MonitoringHost, sshHost MonitoringHost) {
 		host.NetworkBytes = sshHost.NetworkBytes
 	}
 	if host.Source != "beszel" {
-		host.Source = "ssh"
+		host.Source = "ssh_fallback"
 		host.Status = sshHost.Status
 		host.Message = sshHost.Message
+	} else if !monitoringStatusHealthy(host.Status) && monitoringStatusHealthy(sshHost.Status) {
+		host.Source = "ssh_fallback"
+		host.Status = sshHost.Status
+		host.Message = "Beszel 记录不可用，已使用 SSH 兜底"
 	}
 	host.CheckedAt = sshHost.CheckedAt
+}
+
+func monitoringStatusHealthy(status string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	switch status {
+	case "ok", "up", "online", "running", "healthy":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildMonitoringAlerts(hosts []MonitoringHost, containers []MonitoringContainer, cfg Config) []MonitoringAlert {
