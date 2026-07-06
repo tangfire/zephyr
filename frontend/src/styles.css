@@ -630,6 +630,70 @@ body {
   row-gap: 6px;
 }
 
+.monitor-column-title {
+  color: #4f5f52;
+  font-weight: 800;
+}
+
+.monitor-column-title svg {
+  color: #66736a;
+}
+
+.desktop-monitor-system-table .ant-table {
+  border: 1px solid #e2e8dd;
+  border-radius: 8px !important;
+}
+
+.desktop-monitor-system-table .ant-table-thead > tr > th {
+  height: 54px;
+  padding: 10px 14px !important;
+  color: #4f5f52;
+  background: #f7faf4 !important;
+  border-bottom-color: #dfe8d9 !important;
+}
+
+.desktop-monitor-system-table .ant-table-thead > tr > th:first-child {
+  border-start-start-radius: 8px !important;
+}
+
+.desktop-monitor-system-table .ant-table-thead > tr > th:last-child {
+  border-start-end-radius: 8px !important;
+}
+
+.desktop-monitor-system-table .ant-table-tbody > tr > td {
+  height: 76px;
+  padding: 12px 14px !important;
+  vertical-align: middle;
+}
+
+.monitor-system-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.monitor-system-copy {
+  min-width: 0;
+}
+
+.monitor-system-title {
+  max-width: 100%;
+}
+
+.monitor-system-meta {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-load-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .monitoring-alert-row {
   padding: 10px 0 !important;
 }
@@ -639,6 +703,7 @@ body {
   align-items: center;
   gap: 8px;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .monitor-resource-stack {
@@ -653,22 +718,23 @@ body {
 }
 
 .compact-metric-value {
-  min-width: 48px;
+  min-width: 50px;
+  color: #20282d;
   font-variant-numeric: tabular-nums;
 }
 
 .compact-meter {
   display: inline-flex;
-  width: 46px;
-  height: 10px;
+  width: 44px;
+  height: 12px;
   overflow: hidden;
-  background: #e8eee3;
+  background: #eef1ed;
   border-radius: 999px;
 }
 
 .compact-meter-fill {
   height: 100%;
-  min-width: 3px;
+  min-width: 4px;
   background: #45bd73;
   border-radius: inherit;
 }
@@ -690,21 +756,40 @@ body {
   border-radius: 999px;
 }
 
+.system-dot-normal,
 .system-dot-success {
   background: #45bd73;
 }
 
+.system-dot-warning,
 .system-dot-gold {
   background: #f4b000;
 }
 
+.system-dot-danger,
 .system-dot-error {
   background: #e05a4f;
 }
 
-.desktop-monitor-system-table .ant-table-thead > tr > th {
-  color: #5f6468;
-  font-weight: 700;
+.mobile-monitor-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-monitor-metrics .compact-metric {
+  min-height: 34px;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #f8faf7;
+  border: 1px solid #e2e8dd;
+  border-radius: 8px;
+}
+
+.mobile-monitor-runline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
 }
 
 .users-table {

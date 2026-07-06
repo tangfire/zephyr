@@ -27,10 +27,16 @@ import { ProCard, ProTable } from "@ant-design/pro-components";
 import type { ProColumns } from "@ant-design/pro-components";
 import {
   Activity,
+  Clock3,
+  Cpu,
   ExternalLink,
   FileText,
   GitBranch,
+  Gauge,
+  HardDrive,
   Home,
+  MemoryStick,
+  Network,
   Play,
   Plus,
   RefreshCw,
@@ -1345,50 +1351,74 @@ function MonitoringSystemTable({
 }) {
   const columns: ColumnsType<MonitoringHost> = [
     {
-      title: "系统",
-      width: 260,
+      title: <MonitoringColumnTitle icon={<Server size={15} />} label="系统" />,
+      width: 320,
+      fixed: "left",
+      sorter: (a, b) => a.name.localeCompare(b.name),
       render: (_, row) => (
-        <Space size={8}>
+        <div className="monitor-system-cell">
           <span className={`system-dot system-dot-${monitoringStatusColor(row.status)}`} />
-          <Space direction="vertical" size={0}>
-            <Space size={6} wrap>
+          <div className="monitor-system-copy">
+            <Space size={6} wrap className="monitor-system-title">
               <Text strong>{row.name}</Text>
               <Tag color={monitoringStatusColor(row.status)}>{monitoringHostStatusText(row.status)}</Tag>
             </Space>
-            <Text type="secondary">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
-          </Space>
-        </Space>
-      )
-    },
-    {
-      title: "资源水位",
-      width: 330,
-      render: (_, row) => (
-        <div className="monitor-resource-stack">
-          <CompactMetric label="CPU" value={row.cpu_percent || 0} />
-          <CompactMetric label="内存" value={row.memory_percent || 0} />
-          <CompactMetric label="磁盘" value={row.disk_percent || 0} />
+            <Text type="secondary" className="monitor-system-meta">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
+          </div>
         </div>
       )
     },
     {
-      title: "运行",
-      width: 260,
+      title: <MonitoringColumnTitle icon={<Cpu size={15} />} label="CPU" />,
+      width: 132,
+      sorter: (a, b) => (a.cpu_percent || 0) - (b.cpu_percent || 0),
+      render: (_, row) => <CompactMetric value={row.cpu_percent || 0} />
+    },
+    {
+      title: <MonitoringColumnTitle icon={<MemoryStick size={15} />} label="内存" />,
+      width: 142,
+      sorter: (a, b) => (a.memory_percent || 0) - (b.memory_percent || 0),
+      render: (_, row) => <CompactMetric value={row.memory_percent || 0} />
+    },
+    {
+      title: <MonitoringColumnTitle icon={<HardDrive size={15} />} label="磁盘" />,
+      width: 142,
+      sorter: (a, b) => (a.disk_percent || 0) - (b.disk_percent || 0),
+      render: (_, row) => <CompactMetric value={row.disk_percent || 0} />
+    },
+    {
+      title: <MonitoringColumnTitle icon={<Gauge size={15} />} label="负载" />,
+      width: 150,
+      sorter: (a, b) => (a.load_1 || 0) - (b.load_1 || 0),
       render: (_, row) => (
-        <Space direction="vertical" size={2}>
-          <Text>负载 {formatLoad(row.load_1)} / {formatLoad(row.load_5)} / {formatLoad(row.load_15)}</Text>
-          <Text type="secondary">网络 {formatBytes(row.network_bytes_per_second || 0)}/s · {row.uptime || "-"}</Text>
+        <Space size={6} className="monitor-load-cell">
+          <span className={`system-dot system-dot-${metricTone((row.load_1 || 0) * 25)}`} />
+          <Text>{formatLoad(row.load_1)}</Text>
+          <Text type="secondary">{formatLoad(row.load_5)}</Text>
+          <Text type="secondary">{formatLoad(row.load_15)}</Text>
         </Space>
       )
     },
     {
+      title: <MonitoringColumnTitle icon={<Network size={15} />} label="网络" />,
+      width: 132,
+      sorter: (a, b) => (a.network_bytes_per_second || 0) - (b.network_bytes_per_second || 0),
+      render: (_, row) => <Text>{formatBytes(row.network_bytes_per_second || 0)}/s</Text>
+    },
+    {
+      title: <MonitoringColumnTitle icon={<Clock3 size={15} />} label="运行时间" />,
+      width: 132,
+      sorter: (a, b) => (a.uptime_seconds || 0) - (b.uptime_seconds || 0),
+      render: (_, row) => <Text>{row.uptime || "-"}</Text>
+    },
+    {
       title: "来源",
-      width: 100,
+      width: 92,
       render: (_, row) => <Tag color={monitoringSourceColor(row.source)}>{monitoringSourceText(row.source)}</Tag>
     },
     {
       title: "操作",
-      width: 120,
+      width: 116,
       fixed: "right",
       render: (_, row) => (
         <MonitoringHostActions
@@ -1404,11 +1434,11 @@ function MonitoringSystemTable({
       <Table
         className="desktop-monitor-system-table"
         rowKey="id"
-        size="middle"
+        size="small"
         columns={columns}
         dataSource={rows}
         pagination={false}
-        scroll={{ x: 1080 }}
+        scroll={{ x: 1350 }}
       />
       <List
         className="mobile-monitor-system-list"
@@ -1426,12 +1456,16 @@ function MonitoringSystemTable({
               description={
                 <Space direction="vertical" size={8} className="side-stack">
                   <Text type="secondary">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
-                  <CompactMetric label="CPU" value={row.cpu_percent || 0} />
-                  <CompactMetric label="内存" value={row.memory_percent || 0} />
-                  <CompactMetric label="磁盘" value={row.disk_percent || 0} />
-                  <Text type="secondary">
-                    负载 {formatLoad(row.load_1)} {formatLoad(row.load_5)} {formatLoad(row.load_15)} · 网络 {formatBytes(row.network_bytes_per_second || 0)}/s · {row.uptime || "-"}
-                  </Text>
+                  <div className="mobile-monitor-metrics">
+                    <CompactMetric label="CPU" value={row.cpu_percent || 0} />
+                    <CompactMetric label="内存" value={row.memory_percent || 0} />
+                    <CompactMetric label="磁盘" value={row.disk_percent || 0} />
+                  </div>
+                  <div className="mobile-monitor-runline">
+                    <Text type="secondary">负载 {formatLoad(row.load_1)} {formatLoad(row.load_5)} {formatLoad(row.load_15)}</Text>
+                    <Text type="secondary">网络 {formatBytes(row.network_bytes_per_second || 0)}/s</Text>
+                    <Text type="secondary">{row.uptime || "-"}</Text>
+                  </div>
                   <MonitoringHostActions
                     cleanupTask={row.cleanup_task_id ? cleanupTasks.get(row.cleanup_task_id) : undefined}
                     currentUser={currentUser}
@@ -1444,6 +1478,15 @@ function MonitoringSystemTable({
         )}
       />
     </>
+  );
+}
+
+function MonitoringColumnTitle({ icon, label }: { icon: ReactNode; label: string }) {
+  return (
+    <Space size={6} className="monitor-column-title">
+      {icon}
+      <span>{label}</span>
+    </Space>
   );
 }
 
