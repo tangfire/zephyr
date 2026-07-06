@@ -1207,6 +1207,9 @@ func formatUptimeSeconds(seconds uint64) string {
 	if seconds == 0 {
 		return ""
 	}
+	if seconds < 60 {
+		return "刚启动"
+	}
 	days := seconds / 86400
 	seconds %= 86400
 	hours := seconds / 3600

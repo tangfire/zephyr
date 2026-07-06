@@ -70,3 +70,25 @@ func TestMatchBeszelHostDoesNotUseGenericBuilderAlias(t *testing.T) {
 		t.Fatalf("matched host = %q, want ops-test-builder", cfg.ID)
 	}
 }
+
+func TestFormatUptimeSecondsAvoidsZeroMinutes(t *testing.T) {
+	cases := []struct {
+		name    string
+		seconds uint64
+		want    string
+	}{
+		{name: "unknown", seconds: 0, want: ""},
+		{name: "just started", seconds: 12, want: "刚启动"},
+		{name: "one minute", seconds: 60, want: "1 分钟"},
+		{name: "hour", seconds: 3660, want: "1 小时 1 分钟"},
+		{name: "day", seconds: 90000, want: "1 天 1 小时"},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := formatUptimeSeconds(tt.seconds); got != tt.want {
+				t.Fatalf("formatUptimeSeconds(%d) = %q, want %q", tt.seconds, got, tt.want)
+			}
+		})
+	}
+}
