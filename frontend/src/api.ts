@@ -41,7 +41,7 @@ function parseAPIErrorPayload(text: string): ApiErrorPayload {
     const payload = JSON.parse(text) as ApiErrorPayload;
     if (payload && (payload.error || payload.details)) return payload;
   } catch {
-    // Plain text errors are still supported by older Zephyr handlers.
+    // Plain text errors are still supported by older Peapod handlers.
   }
   return { error: text };
 }

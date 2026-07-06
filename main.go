@@ -24,6 +24,7 @@ import (
 )
 
 const cookieName = "zephyr_session"
+const productName = "Peapod"
 
 type authUserContextKey struct{}
 
@@ -391,6 +392,7 @@ func main() {
 	mux.HandleFunc("/docs", app.docs)
 	mux.HandleFunc("/login", app.login)
 	mux.HandleFunc("/logout", app.logout)
+	mux.HandleFunc("/peapod-logo.svg", app.frontendStatic("peapod-logo.svg"))
 	mux.HandleFunc("/zephyr-logo.svg", app.frontendStatic("zephyr-logo.svg"))
 	mux.Handle("/assets/", app.frontendAssets())
 	mux.HandleFunc("/api/login", app.apiLogin)
@@ -419,7 +421,7 @@ func main() {
 		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	log.Printf("Zephyr listening on %s", cfg.Addr)
+	log.Printf("%s listening on %s", productName, cfg.Addr)
 	log.Fatal(server.ListenAndServe())
 }
 
@@ -1244,7 +1246,7 @@ func (a *App) woodpeckerRepoAction(w http.ResponseWriter, r *http.Request) {
 			Username:  user.Username,
 			RemoteIP:  remoteIP(r),
 			TaskID:    "woodpecker-repo-save",
-			TaskTitle: "保存 Zephyr 仓库映射",
+			TaskTitle: "保存 Peapod 仓库映射",
 			RepoID:    req.RepoID,
 			Variables: map[string]string{"repo": strings.TrimSpace(req.RepoName)},
 			Status:    "ok",
@@ -2451,8 +2453,8 @@ func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline
 	}
 	task := Task{
 		ID:        fallbackText(pipeline.ZefireTaskID, fmt.Sprintf("repo-%d-pipeline", repoID)),
-		Group:     "未归类",
-		Title:     pipeline.ZefireTaskTitle,
+		Group:     deploymentGroupFromPipeline(repoName, pipeline),
+		Title:     deploymentTitleFromPipeline(repoName, pipeline),
 		RepoID:    repoID,
 		RepoName:  repoName,
 		Branch:    pipeline.Branch,
@@ -2525,6 +2527,8 @@ func deploymentTargetFromTask(task Task) (deploymentTarget, bool) {
 	if isMaintenanceAction(action) {
 		return deploymentTarget{}, false
 	}
+	groupLabel := meaningfulDeploymentLabel(task.Group)
+	titleLabel := meaningfulDeploymentLabel(task.Title)
 	projectID := firstNonEmpty(
 		variableValue(variables, "ZEPHYR_PROJECT_ID"),
 		variableValue(variables, "PROJECT_ID"),
@@ -2532,16 +2536,56 @@ func deploymentTargetFromTask(task Task) (deploymentTarget, bool) {
 		variableValue(variables, "DEPLOY_SERVICE"),
 		variableValue(variables, "APP"),
 		variableValue(variables, "PROJECT"),
-		normalizeTaskID(task.Group),
+		normalizeTaskID(groupLabel),
+		normalizeTaskID(titleLabel),
 		normalizeTaskID(task.ID),
 	)
 	name := firstNonEmpty(
 		variableValue(variables, "ZEPHYR_PROJECT_NAME"),
 		variableValue(variables, "PROJECT_NAME"),
-		fallbackText(task.Group, task.Title),
+		titleLabel,
+		groupLabel,
+		fallbackText(task.RepoName, fmt.Sprintf("Repo %d", task.RepoID)),
 	)
-	group := fallbackText(task.Group, "部署项目")
+	group := fallbackText(groupLabel, fallbackText(task.RepoName, "部署项目"))
 	return deploymentTarget{ID: fmt.Sprintf("repo-%d:%s", task.RepoID, projectID), Name: name, Group: group}, true
+}
+
+func deploymentGroupFromPipeline(repoName string, pipeline Pipeline) string {
+	group := meaningfulDeploymentLabel(variableValue(pipeline.Variables, "ZEPHYR_PROJECT_GROUP"))
+	if group != "" {
+		return group
+	}
+	return fallbackText(repoName, "部署项目")
+}
+
+func deploymentTitleFromPipeline(repoName string, pipeline Pipeline) string {
+	if title := meaningfulDeploymentLabel(pipeline.ZefireTaskTitle); title != "" {
+		return title
+	}
+	name := meaningfulDeploymentLabel(variableValue(pipeline.Variables, "ZEPHYR_PROJECT_NAME"))
+	if name != "" {
+		return name
+	}
+	action := variableValue(pipeline.Variables, "DEPLOY_ACTION")
+	target := variableValue(pipeline.Variables, "DEPLOY_TARGET")
+	if action != "" && target != "" {
+		return fmt.Sprintf("%s %s", target, action)
+	}
+	if target != "" {
+		return target
+	}
+	return fallbackText(repoName, "部署项目")
+}
+
+func meaningfulDeploymentLabel(value string) string {
+	label := strings.TrimSpace(value)
+	switch label {
+	case "", "未归类", "默认模块":
+		return ""
+	default:
+		return label
+	}
 }
 
 func deploymentActionText(repoID int, repoName string, pipeline Pipeline) string {
@@ -2892,10 +2936,10 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 	items := []SetupStatusItem{
 		{
 			ID:          "zephyr",
-			Title:       "Zephyr 入口",
+			Title:       "Peapod 入口",
 			Status:      setupStatusFromBool(a.cfg.PublicURL != ""),
 			Message:     fallbackText(a.cfg.PublicURL, "未配置公开访问地址"),
-			ActionLabel: "打开 Zephyr",
+			ActionLabel: "打开 Peapod",
 			ActionURL:   a.cfg.PublicURL,
 		},
 		{
@@ -2933,7 +2977,7 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 			ID:      "hosts",
 			Title:   "被管机器",
 			Status:  setupStatusFromBool(len(hosts) > 0),
-			Message: fmt.Sprintf("已配置 %d 台机器；业务机只需要 agent 和 SSH key，不需要运行 Zephyr", len(hosts)),
+			Message: fmt.Sprintf("已配置 %d 台机器；业务机只需要 agent 和 SSH key，不需要运行 Peapod", len(hosts)),
 		},
 		{
 			ID:      "tasks",
@@ -2948,7 +2992,7 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 func (a *App) setupCommands(hosts []MonitorHostConfig) []SetupCommand {
 	publicKey := strings.TrimSpace(readMonitorPublicKey(a.cfg.MonitorSSHKeyPath))
 	if publicKey == "" {
-		publicKey = "ssh-ed25519 AAAA... zephyr-monitor"
+		publicKey = "ssh-ed25519 AAAA... peapod-monitor"
 	}
 	firstHost := "your-host"
 	if len(hosts) > 0 {
@@ -2968,7 +3012,7 @@ docker compose version`),
 		},
 		{
 			ID:          "monitor-key",
-			Title:       "写入 Zephyr 只读监控 SSH key",
+			Title:       "写入 Peapod 只读监控 SSH key",
 			Description: "在被管机器的 SSH 用户下执行。这个 key 用于资源兜底读取，不进入前端。",
 			Command: fmt.Sprintf(`mkdir -p ~/.ssh
 chmod 700 ~/.ssh
@@ -2978,7 +3022,7 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 		{
 			ID:          "beszel-agent",
 			Title:       "接入 Beszel agent",
-			Description: "优先在 Beszel 页面创建系统并复制官方 agent 命令；Zephyr 负责展示接入状态和跳转。",
+			Description: "优先在 Beszel 页面创建系统并复制官方 agent 命令；Peapod 负责展示接入状态和跳转。",
 			Command:     fmt.Sprintf("# 打开 %s，在 Systems 里新增 %s，然后复制 Beszel 给出的 agent 命令到目标机器执行。", fallbackText(a.cfg.BeszelPublicURL, "Beszel"), firstHost),
 		},
 		{
@@ -2995,14 +3039,14 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 
 func setupDocLinks() []SetupDocLink {
 	return []SetupDocLink{
-		{Title: "运维架构", Description: "Zephyr、Woodpecker、Beszel、Grafana、Loki 和业务机的关系。", Path: "docs/ops-architecture.md"},
-		{Title: "迁移 Runbook", Description: "把 Zephyr 迁到专用运维/构建机的步骤和验收项。", Path: "docs/migration-runbook.md"},
+		{Title: "运维架构", Description: "Peapod、Woodpecker、Beszel、Grafana、Loki 和业务机的关系。", Path: "docs/ops-architecture.md"},
+		{Title: "迁移 Runbook", Description: "把 Peapod 迁到专用运维/构建机的步骤和验收项。", Path: "docs/migration-runbook.md"},
 	}
 }
 
 func validateRuntimeConfig(cfg RuntimeConfigFile) error {
 	for label, value := range map[string]string{
-		"Zephyr URL":           cfg.PublicURL,
+		"Peapod URL":           cfg.PublicURL,
 		"Woodpecker Server":    cfg.WoodpeckerServer,
 		"Woodpecker PublicURL": cfg.WoodpeckerPublicURL,
 		"Beszel BaseURL":       cfg.BeszelBaseURL,
@@ -3173,7 +3217,7 @@ func (a *App) externalLinkTasks() []Task {
 			Builtin:     true,
 		})
 	}
-	add("zephyr-open", "打开 Zephyr", "回到运维驾驶舱入口。", a.cfg.PublicURL)
+	add("zephyr-open", "打开 Peapod", "回到运维驾驶舱入口。", a.cfg.PublicURL)
 	add("woodpecker-open", "打开 Woodpecker", "查看完整流水线、日志和仓库配置。", a.cfg.WoodpeckerPublicURL)
 	add("grafana-open", "打开 Grafana", "查看日志、指标、链路和仪表盘。", a.cfg.GrafanaPublicURL)
 	add("beszel-open", "打开 Beszel", "查看机器资源、磁盘、Docker 容器和资源曲线。", a.cfg.BeszelPublicURL)
@@ -3627,14 +3671,14 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Zephyr</title>
+  <title>Peapod</title>
   <link rel="icon" type="image/svg+xml" href="` + faviconPath + `" />
   <style>{{template "styles"}}</style>
 </head>
 <body class="login-page">
   <main class="login-card">
     <div class="brand-mark" aria-hidden="true">` + zephyrLogo + `</div>
-    <h1>Zephyr</h1>
+    <h1>Peapod</h1>
     <p>基础设施部署控制台</p>
     {{if .Error}}<div class="error">密码不正确。</div>{{end}}
     <form method="post" action="/login">
@@ -3656,7 +3700,7 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Zephyr</title>
+  <title>Peapod</title>
   <link rel="icon" type="image/svg+xml" href="` + faviconPath + `" />
   <style>{{template "styles"}}</style>
 </head>
@@ -3666,7 +3710,7 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!doctype html>
       <div class="brand-mark brand-mark-small" aria-hidden="true">` + zephyrLogo + `</div>
       <div>
         <div class="eyebrow">Infrastructure Console</div>
-        <h1>Zephyr</h1>
+        <h1>Peapod</h1>
       </div>
     </div>
     <nav>
@@ -3794,7 +3838,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Zephyr · 部署文档</title>
+  <title>Peapod · 部署文档</title>
   <link rel="icon" type="image/svg+xml" href="` + faviconPath + `" />
   <style>{{template "styles"}}</style>
 </head>
@@ -3818,7 +3862,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       <div>
         <div class="eyebrow">Woodpecker Parameters</div>
         <h2>通用手动部署参数</h2>
-        <p>Zephyr 的部署动作来自 <code>ZEPHYR_TASKS_PATH</code> 指向的任务配置。面板不可用时，可以到 Woodpecker 手动触发同一个仓库、分支和变量。</p>
+        <p>Peapod 的部署动作来自 <code>ZEPHYR_TASKS_PATH</code> 指向的任务配置。面板不可用时，可以到 Woodpecker 手动触发同一个仓库、分支和变量。</p>
       </div>
       <a class="button" target="_blank" rel="noreferrer" href="{{.WoodpeckerURL}}">打开 Woodpecker</a>
     </section>
@@ -3847,7 +3891,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 
       <article class="doc-card">
         <h2>底层系统</h2>
-        <p>Zephyr 只做统一入口和轻量诊断，真正执行仍由 Woodpecker、Beszel、Grafana/Loki/Prometheus/Tempo 完成。</p>
+        <p>Peapod 只做统一入口和轻量诊断，真正执行仍由 Woodpecker、Beszel、Grafana/Loki/Prometheus/Tempo 完成。</p>
         <table class="param-table">
           <thead><tr><th>系统</th><th>用途</th><th>配置</th></tr></thead>
           <tbody>
@@ -3869,10 +3913,10 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 </html>
 {{define "styles"}}` + css + `{{end}}`))
 
-const faviconPath = `/zephyr-logo.svg?v=bean`
+const faviconPath = `/peapod-logo.svg?v=pea`
 
 const zephyrLogo = `
-<img class="zephyr-logo" src="/zephyr-logo.svg?v=bean" alt="" draggable="false" />`
+<img class="peapod-logo" src="/peapod-logo.svg?v=pea" alt="" draggable="false" />`
 
 const css = `
 :root { color-scheme: light; --bg:#f5f8f2; --panel:#fbfdf9; --ink:#1f2a22; --muted:#68736a; --line:#dfe8d9; --accent:#3d721d; --ok:#5ea53a; --warn:#ba7a17; --danger:#bd2c2c; }
@@ -3940,8 +3984,8 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .login-card { position:relative; z-index:1; width:min(420px,100%); padding:28px; background:rgba(251,253,249,.96); border:1px solid var(--line); border-radius:8px; box-shadow:0 28px 70px rgba(39,78,31,.12); }
 .brand-mark { width:58px; height:58px; display:grid; place-items:center; margin-bottom:14px; }
 .brand-mark-small { width:44px; height:44px; margin-bottom:0; flex:0 0 auto; }
-.zephyr-logo { width:100%; height:100%; display:block; object-fit:contain; user-select:none; filter:drop-shadow(0 10px 22px rgba(39,78,31,.18)); }
-.brand-mark-small .zephyr-logo { filter:drop-shadow(0 8px 16px rgba(39,78,31,.14)); }
+.peapod-logo, .zephyr-logo { width:100%; height:100%; display:block; object-fit:contain; user-select:none; filter:drop-shadow(0 10px 22px rgba(39,78,31,.18)); }
+.brand-mark-small .peapod-logo, .brand-mark-small .zephyr-logo { filter:drop-shadow(0 8px 16px rgba(39,78,31,.14)); }
 label { display:block; margin:14px 0 8px; font-weight:800; }
 input, select { width:100%; height:42px; border:1px solid var(--line); border-radius:7px; padding:0 12px; background:#fff; color:var(--ink); }
 .inline-form { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; gap:10px; align-items:center; }
@@ -4037,7 +4081,7 @@ function showLoadError(message) {
   ].join('');
   const el = document.getElementById('loadError');
   el.hidden = false;
-  el.textContent = 'Zephyr 暂时没拿到部署数据：' + message;
+  el.textContent = 'Peapod 暂时没拿到部署数据：' + message;
   document.getElementById('taskGroups').innerHTML = '';
   document.getElementById('quickLinks').innerHTML = '';
   document.getElementById('pipelines').innerHTML = '<p>暂无流水线。</p>';
@@ -4053,7 +4097,7 @@ function renderTasks() {
     if (task.external_url) continue;
     (groups[task.group] ||= []).push(task);
   }
-  const order = ['业务服务', '基础设施', 'Zephyr', '磁盘维护'];
+  const order = ['业务服务', '基础设施', 'Peapod', '磁盘维护'];
   const html = Object.entries(groups).sort((a, b) => groupIndex(a[0], order) - groupIndex(b[0], order)).map(([group, tasks]) => {
     return '<section class="task-section"><h2>' + esc(group) + '</h2><p>' + esc(groupNote(group)) + '</p><div class="task-grid">' + tasks.map(taskCard).join('') + '</div></section>';
   }).join('');
@@ -4083,7 +4127,7 @@ function groupNote(group) {
   const notes = {
     '业务服务': '业务服务部署、回退和重启。',
     '基础设施': 'Grafana、Loki、Tempo、Prometheus、Beszel、Woodpecker 配置刷新。',
-    'Zephyr': '部署平台自更新。',
+    'Peapod': '部署平台自更新。',
     '磁盘维护': '构建缓存和无用镜像清理。'
   };
   return notes[group] || '基础设施操作。';

@@ -21,7 +21,8 @@ import {
 import { LogOut, Menu as MenuIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText } from "./api";
-import { ZephyrLogo } from "./Logo";
+import { PRODUCT_DESCRIPTION, PRODUCT_NAME, PRODUCT_TAGLINE } from "./brand";
+import { PeapodLogo } from "./Logo";
 import type {
   AuditRecord,
   DeploymentStatus,
@@ -53,7 +54,7 @@ import {
   parseVariables,
   pipelineURL,
   variablesText,
-  zephyrNavItems
+  peapodNavItems
 } from "./pages";
 
 const { Header, Content, Sider } = Layout;
@@ -115,9 +116,9 @@ function LoginPage() {
   return (
     <main className="login-page">
       <Card className="login-card">
-        <ZephyrLogo className="login-logo" title="Zephyr" />
-        <Title level={2}>Zephyr</Title>
-        <Text type="secondary">基础设施部署控制台</Text>
+        <PeapodLogo className="login-logo" title={PRODUCT_NAME} />
+        <Title level={2}>{PRODUCT_NAME}</Title>
+        <Text type="secondary">{PRODUCT_DESCRIPTION}</Text>
         <Form layout="vertical" onFinish={submit} className="login-form">
           <Form.Item label="账号或邮箱" name="username">
             <Input autoComplete="username" autoFocus />
@@ -461,7 +462,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
   const activePipelines = pipelines.filter((item) => ["running", "pending"].includes(item.status));
   const runningCount = activePipelines.length;
   const failedCount = recentFailedPipelineCount(pipelines, nowMs);
-  const navItems = zephyrNavItems();
+  const navItems = peapodNavItems();
 
   function navigate(key: string) {
     setActivePage(key);
@@ -538,8 +539,6 @@ function Shell({ page }: { page: "home" | "docs" }) {
             runningCount={runningCount}
             failedCount={failedCount}
             nowMs={nowMs}
-            triggeringTaskIds={triggeringTaskIds}
-            onRun={openRunTask}
             onNavigate={navigate}
             onRefresh={refreshState}
             onInspectPipeline={openPipelineSummary}
@@ -557,17 +556,17 @@ function Shell({ page }: { page: "home" | "docs" }) {
       <Header className="app-header">
         <Space size={12}>
           <Button className="mobile-nav-button" icon={<MenuIcon size={18} />} onClick={() => setMobileNavOpen(true)} />
-          <ZephyrLogo className="header-logo" title="Zephyr" />
+          <PeapodLogo className="header-logo" title={PRODUCT_NAME} />
           <div>
-            <Text className="eyebrow">Infrastructure Console</Text>
+            <Text className="eyebrow">{PRODUCT_TAGLINE}</Text>
             <Title level={4} className="header-title">
-              Zephyr
+              {PRODUCT_NAME}
             </Title>
           </div>
         </Space>
         <Space className="header-actions" size={10}>
           <Tag className="user-pill">{state.current_user.display_name || state.current_user.username}</Tag>
-          <Button icon={<LogOut size={16} />} onClick={logout}>
+          <Button className="logout-button" icon={<LogOut size={16} />} onClick={logout}>
             退出
           </Button>
         </Space>
@@ -596,8 +595,8 @@ function Shell({ page }: { page: "home" | "docs" }) {
         onClose={() => setMobileNavOpen(false)}
         title={
           <Space size={10}>
-            <ZephyrLogo className="drawer-logo" title="Zephyr" />
-            <Text strong>Zephyr</Text>
+            <PeapodLogo className="drawer-logo" title={PRODUCT_NAME} />
+            <Text strong>{PRODUCT_NAME}</Text>
           </Space>
         }
       >
@@ -666,6 +665,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
       </Modal>
 
       <Drawer
+        className="task-config-drawer"
         title={editingTask ? `编辑 ${editingTask.title}` : "新增部署任务"}
         open={taskDrawerOpen}
         onClose={() => {
@@ -685,7 +685,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
             <Input placeholder="部署新服务" />
           </Form.Item>
           <Form.Item label="模块" name="group">
-            <Input placeholder="例如 业务服务 / 基础设施 / Zephyr" />
+            <Input placeholder={`例如 业务服务 / 基础设施 / ${PRODUCT_NAME}`} />
           </Form.Item>
           <Form.Item label="说明" name="description">
             <Input.TextArea rows={2} />
@@ -769,10 +769,10 @@ function LoadingShell() {
             <span className="breeze-node breeze-node-a" />
             <span className="breeze-node breeze-node-b" />
           </div>
-          <ZephyrLogo className="loading-logo loading-logo-active" title="Zephyr" />
-          <Text className="eyebrow">Infrastructure Console</Text>
+          <PeapodLogo className="loading-logo loading-logo-active" title={PRODUCT_NAME} />
+          <Text className="eyebrow">{PRODUCT_TAGLINE}</Text>
           <Title level={4} className="loading-title">
-            Zephyr
+            {PRODUCT_NAME}
           </Title>
           <Text type="secondary" className="loading-caption">
             同步状态中

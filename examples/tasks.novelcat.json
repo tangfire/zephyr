@@ -3,7 +3,7 @@
     "1": "tangfire/xiezuomao-novel-factory",
     "2": "tangfire/lehu-campus",
     "3": "2eho/9router-mod",
-    "9": "tangfire/zephyr"
+    "9": "tangfire/peapod"
   },
   "tasks": [
     {
@@ -86,50 +86,50 @@
       }
     },
     {
-      "id": "zephyr-status",
-      "group": "Zephyr",
-      "title": "检查 Zephyr 状态",
-      "description": "检查 Zephyr 服务状态和健康检查入口。",
+      "id": "peapod-status",
+      "group": "Peapod",
+      "title": "检查 Peapod 状态",
+      "description": "检查 Peapod 服务状态和健康检查入口。",
       "repo_id": 9,
-      "repo_name": "tangfire/zephyr",
+      "repo_name": "tangfire/peapod",
       "branch": "main",
       "risk": "normal",
       "variables": {
         "DEPLOY_ACTION": "status",
-        "ZEPHYR_PROJECT_ID": "zephyr",
-        "ZEPHYR_PROJECT_NAME": "Zephyr"
+        "ZEPHYR_PROJECT_ID": "peapod",
+        "ZEPHYR_PROJECT_NAME": "Peapod"
       }
     },
     {
-      "id": "zephyr-restart",
-      "group": "Zephyr",
-      "title": "重启 Zephyr",
-      "description": "只重启 Zephyr host service，不改数据库和配置。",
+      "id": "peapod-restart",
+      "group": "Peapod",
+      "title": "重启 Peapod",
+      "description": "只重启 Peapod host service，不改数据库和配置。",
       "repo_id": 9,
-      "repo_name": "tangfire/zephyr",
+      "repo_name": "tangfire/peapod",
       "branch": "main",
       "risk": "warning",
       "confirm_text": "RESTART",
       "variables": {
         "DEPLOY_ACTION": "restart",
-        "ZEPHYR_PROJECT_ID": "zephyr",
-        "ZEPHYR_PROJECT_NAME": "Zephyr"
+        "ZEPHYR_PROJECT_ID": "peapod",
+        "ZEPHYR_PROJECT_NAME": "Peapod"
       }
     },
     {
-      "id": "zephyr-deploy",
-      "group": "Zephyr",
-      "title": "部署 Zephyr",
-      "description": "运行 Zephyr 测试、构建前端和 Go 二进制，然后原子替换并重启。",
+      "id": "peapod-deploy",
+      "group": "Peapod",
+      "title": "部署 Peapod",
+      "description": "运行 Peapod 测试、构建前端和 Go 二进制，然后原子替换并重启。",
       "repo_id": 9,
-      "repo_name": "tangfire/zephyr",
+      "repo_name": "tangfire/peapod",
       "branch": "main",
       "risk": "danger",
-      "confirm_text": "ZEPHYR",
+      "confirm_text": "PEAPOD",
       "variables": {
         "DEPLOY_ACTION": "deploy",
-        "ZEPHYR_PROJECT_ID": "zephyr",
-        "ZEPHYR_PROJECT_NAME": "Zephyr"
+        "ZEPHYR_PROJECT_ID": "peapod",
+        "ZEPHYR_PROJECT_NAME": "Peapod"
       }
     },
     {

@@ -1,6 +1,15 @@
 when:
   - event: manual
 
+clone:
+  - name: git
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+      depth: 50
+      lfs: false
+      recursive: false
+
 steps:
   - name: frontend-build
     image: node:22-alpine
@@ -9,7 +18,7 @@ steps:
       - set -euo pipefail
       - 'if [ "${DEPLOY_ACTION:-deploy}" != "deploy" ]; then echo "DEPLOY_ACTION=${DEPLOY_ACTION:-deploy}; skip test/build"; exit 0; fi'
       - cd frontend
-      - npm ci --no-audit --no-fund
+      - npm ci --prefer-offline --no-audit --no-fund
       - npm run build
     volumes:
       - /opt/woodpecker-cache/zephyr/npm:/root/.npm

@@ -24,7 +24,7 @@ host_healthcheck() {
     sleep 2
     i=$((i + 1))
   done
-  echo "Zephyr health check failed: $HEALTH_URL" >&2
+  echo "Peapod health check failed: $HEALTH_URL" >&2
   cat /tmp/zephyr-health.err >&2 2>/dev/null || true
   rm -f /tmp/zephyr-health.out /tmp/zephyr-health.err
   return 1

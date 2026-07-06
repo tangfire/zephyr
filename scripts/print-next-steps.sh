@@ -2,7 +2,7 @@
 set -eu
 
 cat <<'EOF'
-Zephyr quick start
+Peapod quick start
 
 1. Initialize:
    scripts/bootstrap.sh
@@ -15,7 +15,7 @@ Zephyr quick start
    docker compose up -d --build
 
 4. Open:
-   Zephyr      http://127.0.0.1:8095
+   Peapod      http://127.0.0.1:8095
    Woodpecker  http://127.0.0.1:8000
    Beszel      http://127.0.0.1:8090
    Grafana     http://127.0.0.1:3000
@@ -25,5 +25,5 @@ Zephyr quick start
    - run scripts/bootstrap.sh
    - edit .env public URLs and secrets
    - add host config to ZEPHYR_MONITOR_HOSTS_JSON
-   - add deploy tasks in Zephyr Settings
+   - add deploy tasks in Peapod Settings
 EOF

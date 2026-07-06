@@ -1,21 +1,21 @@
-# Zephyr
+# Peapod
 
-Zephyr is a lightweight operations cockpit for small teams. It gives one clean entry point for deployment, pipeline diagnosis, resource monitoring, logs, and infrastructure links while keeping the underlying tools replaceable.
+Peapod is a lightweight operations cockpit for small teams. It gives one clean entry point for deployment, pipeline diagnosis, resource monitoring, logs, and infrastructure links while keeping the underlying tools replaceable.
 
 The default stack is:
 
-- Zephyr: operations cockpit and task registry
+- Peapod: operations cockpit and task registry
 - Woodpecker: CI/CD runner and manual deployment executor
 - Beszel: host and container resource visibility
 - Grafana + Prometheus + Loki + Tempo: metrics, logs, and traces
 
-Zephyr does not replace these systems. It hides the daily complexity so operators can work from one product surface.
+Peapod does not replace these systems. It hides the daily complexity so operators can work from one product surface.
 
 ## Quick Start
 
 ```bash
-git clone <your-zephyr-repo> zephyr
-cd zephyr
+git clone <your-peapod-repo> peapod
+cd peapod
 scripts/bootstrap.sh
 vi .env
 docker compose up -d --build
@@ -23,7 +23,7 @@ docker compose up -d --build
 
 Open:
 
-- Zephyr: `http://127.0.0.1:8095`
+- Peapod: `http://127.0.0.1:8095`
 - Woodpecker: `http://127.0.0.1:8000`
 - Beszel: `http://127.0.0.1:8090`
 - Grafana: `http://127.0.0.1:3000`
@@ -38,25 +38,27 @@ npm --prefix frontend run build
 
 ## Configuration Model
 
-Zephyr is intentionally configuration-driven.
+Peapod is intentionally configuration-driven.
+
+Compatibility note: the product name is Peapod, but the first stable release still keeps the `ZEPHYR_*` environment variables, `zephyr_*` tables, and default `/opt/zephyr` runtime path for zero-downtime upgrades from older installs.
 
 - Repositories and deployment tasks live in `data/zephyr/tasks.json`.
 - Monitored hosts live in `ZEPHYR_MONITOR_HOSTS_JSON`.
 - External links live in `ZEPHYR_LINKS_JSON`.
-- User accounts can use MySQL through `ZEPHYR_DB_DSN`; otherwise Zephyr falls back to a single emergency password.
-- The default compose stack includes a local `zephyr-mysql` service for team accounts, audit logs, and setup state. You can later point `ZEPHYR_DB_DSN` to a managed MySQL instance without changing Zephyr code.
+- User accounts can use MySQL through `ZEPHYR_DB_DSN`; otherwise Peapod falls back to a single emergency password.
+- The default compose stack includes a local `zephyr-mysql` service for team accounts, audit logs, and setup state. You can later point `ZEPHYR_DB_DSN` to a managed MySQL instance without changing Peapod code.
 
 The bundled `examples/` folder contains:
 
 - `tasks.generic.json`: neutral example for a normal service
-- `tasks.zephyr-self.json`: Zephyr self-deploy tasks for Woodpecker
+- `tasks.zephyr-self.json`: Peapod self-deploy tasks for Woodpecker
 - `monitor-hosts.generic.json`: local + remote host monitoring example
 - `tasks.novelcat.json`: our studio-specific migration example, intentionally outside the app defaults
 
 ## Operations Docs
 
-- [Architecture](docs/ops-architecture.md): how Zephyr, Woodpecker, Beszel, Grafana, Loki, and managed machines fit together.
-- [Migration Runbook](docs/migration-runbook.md): how to move Zephyr to a dedicated operations/build machine and connect production or test hosts.
+- [Architecture](docs/ops-architecture.md): how Peapod, Woodpecker, Beszel, Grafana, Loki, and managed machines fit together.
+- [Migration Runbook](docs/migration-runbook.md): how to move Peapod to a dedicated operations/build machine and connect production or test hosts.
 
 ## Required Secrets
 
@@ -79,7 +81,7 @@ ZEPHYR_BOOTSTRAP_PASSWORD=change-this-on-first-login
 
 To move to cloud MySQL later, create the same database and change only `ZEPHYR_DB_DSN`.
 
-Zephyr creates these tables automatically:
+Peapod creates these tables automatically:
 
 - `zephyr_users`
 - `zephyr_deploy_audit_logs`
@@ -115,29 +117,29 @@ Task example:
 ```
 
 Use the same `ZEPHYR_PROJECT_ID` for deploy and rollback tasks so the project status table can merge them into one service row.
-Set `ZEPHYR_DEPLOY_MARKER_PATH` and/or `ZEPHYR_DEPLOY_VERIFY_URL` when possible. Zephyr will then show a deployment as verified only after the marker commit matches the successful pipeline and the health endpoint returns 2xx/3xx.
+Set `ZEPHYR_DEPLOY_MARKER_PATH` and/or `ZEPHYR_DEPLOY_VERIFY_URL` when possible. Peapod will then show a deployment as verified only after the marker commit matches the successful pipeline and the health endpoint returns 2xx/3xx.
 
-## Zephyr Self Deploy
+## Peapod Self Deploy
 
-This repository includes `.woodpecker/deploy.yml` for Zephyr itself. It is a manual pipeline with three supported actions:
+This repository includes `.woodpecker/deploy.yml` for Peapod itself. It is a manual pipeline with three supported actions:
 
 - `DEPLOY_ACTION=status`: check the host service and health endpoint.
-- `DEPLOY_ACTION=restart`: restart the host Zephyr service.
+- `DEPLOY_ACTION=restart`: restart the host Peapod service.
 - `DEPLOY_ACTION=deploy`: run frontend build, Go tests, Go build, copy the new release into `/opt/zephyr`, and restart.
 
 To enable it on a new operations machine:
 
-1. Enable the Zephyr repository in Woodpecker.
+1. Enable the Peapod repository in Woodpecker.
 2. Mark the repo as trusted for volumes, because the deploy step mounts `/var/run/docker.sock` and `/opt/zephyr`.
 3. Add the task snippet from `examples/tasks.zephyr-self.json` into `data/zephyr/tasks.json`.
 4. Replace `repo_id` and `repo_name` with the real Woodpecker repo id and Git repo name.
-5. Run `检查 Zephyr 状态` first, then run `部署 Zephyr`.
+5. Run `检查 Peapod 状态` first, then run `部署 Peapod`.
 
-The current deploy script expects Zephyr to run as a host systemd service named `zephyr`. If you run Zephyr only as a Compose container, keep using `docker compose up -d --build` or adapt `scripts/deploy-zephyr-local.sh` for that deployment shape.
+The current deploy script expects Peapod to run as a host systemd service named `zephyr`. If you run Peapod only as a Compose container, keep using `docker compose up -d --build` or adapt `scripts/deploy-zephyr-local.sh` for that deployment shape.
 
 ## Build Queue
 
-Keep `WOODPECKER_MAX_WORKFLOWS=1` on small operations machines. Zephyr can trigger multiple deployments, but Woodpecker will run only one workflow at a time and keep the rest pending, which prevents two large Docker builds from exhausting CPU, memory, or disk IO at the same time.
+Keep `WOODPECKER_MAX_WORKFLOWS=1` on small operations machines. Peapod can trigger multiple deployments, but Woodpecker will run only one workflow at a time and keep the rest pending, which prevents two large Docker builds from exhausting CPU, memory, or disk IO at the same time.
 
 ## Monitoring Hosts
 
@@ -165,7 +167,7 @@ Put the private key at `data/zephyr/ssh/monitor_ed25519` when using the default 
 6. Configure Beszel systems or SSH fallback hosts.
 7. Run `docker compose up -d --build`.
 
-After that, daily operations should happen inside Zephyr:
+After that, daily operations should happen inside Peapod:
 
 - trigger deployments and rollbacks
 - inspect running and failed pipelines
@@ -175,4 +177,4 @@ After that, daily operations should happen inside Zephyr:
 
 ## Boundary
 
-Zephyr should stay generic. Product-specific scripts, dashboards, repositories, and task variables belong in `examples/`, `data/zephyr/tasks.json`, or the target project repositories. Do not hard-code business project names into Zephyr itself.
+Peapod should stay generic. Product-specific scripts, dashboards, repositories, and task variables belong in `examples/`, `data/zephyr/tasks.json`, or the target project repositories. Do not hard-code business project names into Peapod itself.

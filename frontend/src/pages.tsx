@@ -5,6 +5,7 @@ import {
   Card,
   Col,
   Descriptions,
+  Dropdown,
   Drawer,
   Form,
   Input,
@@ -22,7 +23,7 @@ import {
   Typography
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { ProCard, ProTable, StatisticCard } from "@ant-design/pro-components";
+import { ProCard, ProTable } from "@ant-design/pro-components";
 import type { ProColumns } from "@ant-design/pro-components";
 import {
   Activity,
@@ -30,7 +31,6 @@ import {
   FileText,
   GitBranch,
   Home,
-  Link2,
   Play,
   Plus,
   RefreshCw,
@@ -43,6 +43,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { ApiError, api, errorText } from "./api";
+import { LEGACY_PRODUCT_REPO_NAME, PRODUCT_NAME, PRODUCT_REPO_NAME, PRODUCT_REPO_OWNER } from "./brand";
 import type {
   AuditRecord,
   DeploymentStatus,
@@ -85,16 +86,48 @@ const riskColors: Record<Risk, string> = {
 
 const OVERVIEW_PIPELINE_LOOKBACK_SECONDS = 24 * 60 * 60;
 
-export function zephyrNavItems() {
+export function peapodNavItems() {
   return [
     { key: "overview", icon: <Home size={16} />, label: "总览" },
     { key: "deploy", icon: <Rocket size={16} />, label: "部署" },
     { key: "pipelines", icon: <Activity size={16} />, label: "流水线" },
     { key: "monitoring", icon: <Server size={16} />, label: "监控" },
-    { key: "links", icon: <Link2 size={16} />, label: "入口" },
-    { key: "docs", icon: <FileText size={16} />, label: "文档" },
     { key: "settings", icon: <Settings size={16} />, label: "设置" }
   ];
+}
+
+export const zephyrNavItems = peapodNavItems;
+
+function PageIntro({
+  title,
+  description,
+  stats,
+  actions
+}: {
+  title: string;
+  description: string;
+  stats: Array<{ label: string; value: string; tone?: "normal" | "success" | "warning" | "danger" }>;
+  actions?: ReactNode;
+}) {
+  return (
+    <ProCard className="page-intro-card">
+      <div className="page-intro">
+        <div className="page-intro-copy">
+          <Title level={3}>{title}</Title>
+          <Text type="secondary">{description}</Text>
+        </div>
+        <div className="page-intro-stats">
+          {stats.map((item) => (
+            <div className={`page-intro-stat page-intro-stat-${item.tone || "normal"}`} key={item.label}>
+              <Text type="secondary">{item.label}</Text>
+              <Text strong>{item.value}</Text>
+            </div>
+          ))}
+        </div>
+        {actions && <div className="page-intro-actions">{actions}</div>}
+      </div>
+    </ProCard>
+  );
 }
 
 export function OverviewPage({
@@ -106,8 +139,6 @@ export function OverviewPage({
   runningCount,
   failedCount,
   nowMs,
-  triggeringTaskIds,
-  onRun,
   onNavigate,
   onRefresh,
   onInspectPipeline
@@ -120,8 +151,6 @@ export function OverviewPage({
   runningCount: number;
   failedCount: number;
   nowMs: number;
-  triggeringTaskIds: string[];
-  onRun: (task: Task) => void;
   onNavigate: (key: string) => void;
   onRefresh: () => void;
   onInspectPipeline: (row: Pipeline) => void;
@@ -129,10 +158,6 @@ export function OverviewPage({
   const alerts = monitoring?.alerts || [];
   const alertLevel = highestMonitoringAlertLevel(alerts);
   const attentionPipelines = overviewPipelineRows(pipelines, nowMs, 4);
-  const productDeploy = state.tasks.find((task) => task.id === "xzm-product-deploy");
-  const productRollback = state.tasks.find((task) => task.id === "xzm-product-rollback");
-  const productionCleanup = state.tasks.find((task) => task.id === "production-cleanup");
-  const triggeringTaskIDSet = new Set(triggeringTaskIds);
   const highestDisk = highestHostMetric(monitoring?.hosts || [], "disk_percent");
   const highestMemory = highestHostMetric(monitoring?.hosts || [], "memory_percent");
   const healthyText = alertLevel === "critical" ? "需要处理" : alertLevel === "warning" ? "有提醒" : "可以上线";
@@ -150,21 +175,15 @@ export function OverviewPage({
             <Text type="secondary">线上版本、队列和资源水位集中在这里。</Text>
           </div>
           <Space wrap>
-            {productDeploy && (
-              <Button type="primary" icon={<Rocket size={16} />} loading={triggeringTaskIDSet.has(productDeploy.id)} onClick={() => onRun(productDeploy)}>
-                部署产品
-              </Button>
-            )}
-            {productRollback && (
-              <Button danger loading={triggeringTaskIDSet.has(productRollback.id)} onClick={() => onRun(productRollback)}>
-                回退产品
-              </Button>
-            )}
-            {productionCleanup && (
-              <Button danger onClick={() => onRun(productionCleanup)}>
-                清理生产机
-              </Button>
-            )}
+            <Button type="primary" icon={<Rocket size={16} />} onClick={() => onNavigate("deploy")}>
+              进入部署
+            </Button>
+            <Button onClick={() => onNavigate("pipelines")}>
+              查看流水线
+            </Button>
+            <Button onClick={() => onNavigate("monitoring")}>
+              查看监控
+            </Button>
             <Button icon={<RefreshCw size={16} />} onClick={onRefresh}>
               刷新
             </Button>
@@ -172,12 +191,14 @@ export function OverviewPage({
         </div>
       </ProCard>
 
-      <StatisticCard.Group className="overview-stat-group" direction="row">
-        <StatisticCard statistic={{ title: "运行中 / 排队", value: runningCount, prefix: <Activity size={18} /> }} />
-        <StatisticCard statistic={{ title: "24h 失败", value: failedCount, valueStyle: { color: failedCount ? "#bd2c2c" : undefined } }} />
-        <StatisticCard statistic={{ title: "磁盘最高", value: `${formatPercent(highestDisk.value)}%`, description: highestDisk.host?.name || "-" }} />
-        <StatisticCard statistic={{ title: "内存最高", value: `${formatPercent(highestMemory.value)}%`, description: highestMemory.host?.name || "-" }} />
-      </StatisticCard.Group>
+      <OverviewMetricGrid
+        items={[
+          { label: "运行中 / 排队", value: String(runningCount), meta: "当前队列", icon: <Activity size={18} /> },
+          { label: "24h 失败", value: String(failedCount), meta: "未被成功覆盖", tone: failedCount ? "danger" : "success" },
+          { label: "磁盘最高", value: `${formatPercent(highestDisk.value)}%`, meta: highestDisk.host?.name || "-", tone: metricTone(highestDisk.value) },
+          { label: "内存最高", value: `${formatPercent(highestMemory.value)}%`, meta: highestMemory.host?.name || "-", tone: metricTone(highestMemory.value) }
+        ]}
+      />
 
       {alerts.length > 0 && (
         <Alert
@@ -203,6 +224,27 @@ export function OverviewPage({
   );
 }
 
+function OverviewMetricGrid({
+  items
+}: {
+  items: Array<{ label: string; value: string; meta?: string; icon?: ReactNode; tone?: "normal" | "success" | "warning" | "danger" }>;
+}) {
+  return (
+    <div className="overview-metric-grid">
+      {items.map((item) => (
+        <div className={`overview-metric-card overview-metric-${item.tone || "normal"}`} key={item.label}>
+          <div className="overview-metric-label">
+            {item.icon}
+            <Text type="secondary">{item.label}</Text>
+          </div>
+          <Text strong className="overview-metric-value">{item.value}</Text>
+          {item.meta && <Text type="secondary" className="overview-metric-meta">{item.meta}</Text>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DeploymentVersionList({ rows, nowMs }: { rows: DeploymentStatus[]; nowMs: number }) {
   if (!rows.length) return <Alert type="info" showIcon message="暂无部署状态" />;
   return (
@@ -214,7 +256,7 @@ function DeploymentVersionList({ rows, nowMs }: { rows: DeploymentStatus[]; nowM
           <List.Item.Meta
             title={
               <Space wrap>
-                <Text strong>{row.name}</Text>
+                <Text strong>{productText(row.name)}</Text>
                 <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
               </Space>
             }
@@ -241,7 +283,7 @@ function PipelineActivityList({ rows, nowMs, onInspect }: { rows: Pipeline[]; no
           <List.Item.Meta
             title={
               <Space wrap>
-                <Text strong>{row.repo_name} #{row.number}</Text>
+                <Text strong>{productText(row.repo_name)} #{row.number}</Text>
                 <Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag>
               </Space>
             }
@@ -277,16 +319,30 @@ export function DeployPage({
   onRefresh: () => void;
 }) {
   const [filters, setFilters] = useState({ group: "", repo: "", risk: "", q: "" });
+  const verifiedCount = rows.filter((row) => row.deploy_verified).length;
+  const attentionCount = rows.filter((row) => {
+    const status = row.latest_status || row.last_status;
+    return ["failure", "error", "killed"].includes(status) || row.deploy_verify_status === "mismatch";
+  }).length;
   return (
     <Space direction="vertical" size={16} className="side-stack">
+      <PageIntro
+        title="部署"
+        description="确认线上版本、选择分支、触发部署或回退。低频任务配置放在设置里。"
+        stats={[
+          { label: "项目", value: String(rows.length || 0) },
+          { label: "已验证", value: `${verifiedCount}/${rows.length || 0}`, tone: verifiedCount === rows.length && rows.length ? "success" : "normal" },
+          { label: "需关注", value: String(attentionCount), tone: attentionCount ? "danger" : "success" }
+        ]}
+        actions={<Button icon={<RefreshCw size={16} />} loading={refreshing} onClick={onRefresh}>刷新</Button>}
+      />
       <ProCard
         title={
           <Space size={8}>
             <GitBranch size={16} />
-            <span>部署矩阵</span>
+            <span>项目状态</span>
           </Space>
         }
-        extra={<Button icon={<RefreshCw size={16} />} loading={refreshing} onClick={onRefresh}>刷新</Button>}
       >
         <DeploymentStatusTable
           rows={rows}
@@ -302,9 +358,10 @@ export function DeployPage({
         title={
           <Space size={8}>
             <Play size={16} />
-            <span>动作目录</span>
+            <span>维护动作</span>
           </Space>
         }
+        extra={<Text type="secondary">部署/回退已收敛到项目状态表</Text>}
       >
         <TaskFilters state={state} value={filters} onChange={setFilters} />
         <TaskTable state={state} filters={filters} triggeringTaskIds={triggeringTaskIds} onRun={onRun} />
@@ -331,14 +388,27 @@ export function PipelinePage({
   onInspect: (row: Pipeline) => void;
 }) {
   const runningRows = rows.filter((row) => ["running", "pending"].includes(row.status));
+  const runningCount = rows.filter((row) => row.status === "running").length;
+  const pendingCount = rows.filter((row) => row.status === "pending").length;
+  const failedCount = recentFailedPipelineCount(rows, nowMs);
   return (
     <Space direction="vertical" size={16} className="side-stack">
+      <PageIntro
+        title="流水线"
+        description="查看队列、耗时、触发人、分支和失败摘要。执行由 Woodpecker 单并发排队。"
+        stats={[
+          { label: "运行中", value: String(runningCount), tone: runningCount ? "warning" : "normal" },
+          { label: "排队", value: String(pendingCount), tone: pendingCount ? "warning" : "normal" },
+          { label: "24h 失败", value: String(failedCount), tone: failedCount ? "danger" : "success" }
+        ]}
+        actions={<Button icon={<RefreshCw size={16} />} loading={refreshing} onClick={onRefresh}>刷新</Button>}
+      />
       {runningRows.length > 0 && (
         <ProCard title="运行中队列">
           <PipelineActivityList rows={runningRows} nowMs={nowMs} onInspect={onInspect} />
         </ProCard>
       )}
-      <ProCard title="流水线进度" extra={<Button icon={<RefreshCw size={16} />} loading={refreshing} onClick={onRefresh}>刷新</Button>}>
+      <ProCard title="流水线进度">
         <PipelineTable rows={rows} woodpecker={woodpecker} nowMs={nowMs} onCancel={onCancel} onInspect={onInspect} />
       </ProCard>
     </Space>
@@ -385,6 +455,7 @@ export function SettingsPage({
           label: "仓库",
           children: state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />
         },
+        { key: "links", label: "基础设施入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
         {
           key: "tasks",
           label: "部署任务",
@@ -399,7 +470,8 @@ export function SettingsPage({
           label: "接入配置",
           children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
         },
-        { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> }
+        { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
+        { key: "docs", label: "参数文档", children: <Docs state={state} compact /> }
       ]}
     />
   );
@@ -446,8 +518,10 @@ function TaskTable({
   onDelete?: (task: Task) => void;
 }) {
   const triggeringTaskIDSet = useMemo(() => new Set(triggeringTaskIds), [triggeringTaskIds]);
+  const deploymentTaskIDs = useMemo(() => new Set(deploymentManagedTaskIDs(state.tasks || [], state.deployment_statuses || [])), [state.tasks, state.deployment_statuses]);
   const data = (state.tasks || []).filter((item) => {
     if (item.external_url) return false;
+    if (deploymentTaskIDs.has(item.id)) return false;
     if (filters.group && item.group !== filters.group) return false;
     if (filters.repo && String(item.repo_id) !== filters.repo) return false;
     if (filters.risk && item.risk !== filters.risk) return false;
@@ -464,10 +538,11 @@ function TaskTable({
     {
       title: "动作",
       dataIndex: "title",
+      width: 260,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{row.title}</Text>
-          <Text type="secondary">{row.description || row.group}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text strong ellipsis={{ tooltip: productText(row.title) }}>{productText(row.title)}</Text>
+          <Text type="secondary" ellipsis={{ tooltip: taskDescriptionLine(state, row) }}>{taskDescriptionLine(state, row)}</Text>
         </Space>
       )
     },
@@ -475,16 +550,16 @@ function TaskTable({
       title: "归属",
       width: 220,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
-          <Text>{row.group || "默认模块"}</Text>
-          <Text type="secondary">{repoName(state, row)}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text ellipsis={{ tooltip: taskGroupLabel(state, row) }}>{taskGroupLabel(state, row)}</Text>
+          <Text type="secondary" ellipsis={{ tooltip: repoName(state, row) }}>{repoName(state, row)}</Text>
         </Space>
       )
     },
     {
       title: "默认",
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} className="table-cell-stack">
           <Text>{row.branch || "main"}</Text>
           {pipelineVariableHint(taskToPipelinePreview(state, row)) && <Text type="secondary">{pipelineVariableHint(taskToPipelinePreview(state, row))}</Text>}
           {row.confirm_text && <Text type="secondary">确认：{row.confirm_text}</Text>}
@@ -555,15 +630,15 @@ function TaskTable({
             <List.Item.Meta
               title={
                 <Space wrap>
-                  <Text strong>{row.title}</Text>
+                  <Text strong>{productText(row.title)}</Text>
                   <Tag color={riskColors[row.risk] || "default"}>{riskLabel(row.risk)}</Tag>
                   {!canRunTask(state.current_user, row) && <Tag>仅管理员</Tag>}
                 </Space>
               }
               description={
                 <Space direction="vertical" size={4}>
-                  <Text type="secondary">{row.description}</Text>
-                  <Text>{row.group || "默认模块"} · {repoName(state, row)} · {row.branch || "main"}</Text>
+                  <Text type="secondary">{productText(row.description)}</Text>
+                  <Text>{taskGroupLabel(state, row)} · {repoName(state, row)} · {row.branch || "main"}</Text>
                   <Text type="secondary">{pipelineTaskText(taskToPipelinePreview(state, row))}</Text>
                   {state.configurable && onEdit && (
                     <Space>
@@ -594,7 +669,8 @@ function TaskFilters({
   value: { group: string; repo: string; risk: string; q: string };
   onChange: (value: { group: string; repo: string; risk: string; q: string }) => void;
 }) {
-  const tasks = (state.tasks || []).filter((item) => !item.external_url);
+  const deploymentTaskIDs = new Set(deploymentManagedTaskIDs(state.tasks || [], state.deployment_statuses || []));
+  const tasks = (state.tasks || []).filter((item) => !item.external_url && !deploymentTaskIDs.has(item.id));
   const groups = Array.from(new Set(tasks.map((item) => item.group).filter(Boolean))).sort();
   const repoIDs = Array.from(new Set(tasks.map((item) => String(item.repo_id)).filter(Boolean))).sort((a, b) => Number(a) - Number(b));
   const update = (patch: Partial<typeof value>) => onChange({ ...value, ...patch });
@@ -660,10 +736,10 @@ export function DeployErrorContent({ error, task }: { error: unknown; task: Task
         type="error"
         showIcon
         message={errorText(error) || "Woodpecker 没有返回可读错误"}
-        description="Zephyr 已经记录这次失败。优先检查 Woodpecker 仓库 ID、分支、token 权限、仓库 Trusted/Secrets 配置，以及 Woodpecker Server 日志。"
+        description={`${PRODUCT_NAME} 已经记录这次失败。优先检查 Woodpecker 仓库 ID、分支、token 权限、仓库 Trusted/Secrets 配置，以及 Woodpecker Server 日志。`}
       />
       <Descriptions size="small" column={1} bordered>
-        <Descriptions.Item label="任务">{task.title}</Descriptions.Item>
+        <Descriptions.Item label="任务">{productText(task.title)}</Descriptions.Item>
         <Descriptions.Item label="仓库">Repo {task.repo_id}</Descriptions.Item>
         <Descriptions.Item label="分支">{task.branch || "main"}</Descriptions.Item>
         <Descriptions.Item label="变量">{variables || "-"}</Descriptions.Item>
@@ -706,9 +782,9 @@ function DeploymentStatusTable({
       title: "项目",
       width: 210,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{row.name}</Text>
-          <Text type="secondary">{row.group} · {row.repo_name || `Repo ${row.repo_id}`}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text strong ellipsis={{ tooltip: productText(row.name) }}>{productText(row.name)}</Text>
+          <Text type="secondary" ellipsis={{ tooltip: deploymentScopeText(row) }}>{deploymentScopeText(row)}</Text>
         </Space>
       )
     },
@@ -730,7 +806,7 @@ function DeploymentStatusTable({
           {row.actual_commit && !commitLooksSame(row.actual_commit, row.current_commit) && (
             <Text type="warning">实际：{row.actual_commit.slice(0, 8)}</Text>
           )}
-          <Text type="secondary">{row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}`}</Text>
+          <Text type="secondary" ellipsis={{ tooltip: row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}` }}>{row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}`}</Text>
           {row.deploy_verify_message && (
             <Tooltip title={row.deploy_verify_message}>
               <Text className="deployment-verify-note" type={row.deploy_verified ? "secondary" : "warning"}>{shortDeploymentVerifyMessage(row)}</Text>
@@ -743,9 +819,9 @@ function DeploymentStatusTable({
       title: "最近执行",
       width: 230,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} className="table-cell-stack">
           <Space size={6}>
-            <Text>{row.latest_action || row.last_action || "-"}</Text>
+            <Text ellipsis={{ tooltip: productText(row.latest_action || row.last_action || "-") }}>{productText(row.latest_action || row.last_action || "-")}</Text>
             <Tag color={statusColors[row.latest_status || row.last_status] || "default"}>{statusText(row.latest_status || row.last_status)}</Tag>
           </Space>
           <Text type="secondary">
@@ -758,7 +834,7 @@ function DeploymentStatusTable({
       title: "上一成功版本",
       width: 180,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
+        <Space direction="vertical" size={0} className="table-cell-stack">
           <Text>{row.previous_branch || "-"}</Text>
           <Text code={Boolean(row.previous_commit)}>{(row.previous_commit || "").slice(0, 8) || "-"}</Text>
           {row.previous_deployed_at ? <Text type="secondary">{deployedAgeText(row.previous_deployed_at, nowMs)}</Text> : null}
@@ -786,6 +862,7 @@ function DeploymentStatusTable({
                 </span>
               </Tooltip>
             )}
+            <DeploymentExtraActions actions={actions.extras} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
             {row.pipeline ? <Button size="small" href={deploymentPipelineURL(woodpecker, row)} target="_blank" icon={<ExternalLink size={14} />} /> : null}
           </Space>
         );
@@ -806,6 +883,7 @@ function DeploymentStatusTable({
         tableAlertRender={false}
         pagination={false}
         scroll={{ x: 1040 }}
+        tableLayout="fixed"
       />
       <List
         className="mobile-deployment-list"
@@ -818,14 +896,14 @@ function DeploymentStatusTable({
             ].filter(Boolean)}
           >
             <List.Item.Meta
-              title={<Space><Text strong>{row.name}</Text><Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag></Space>}
+              title={<Space><Text strong>{productText(row.name)}</Text><Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag></Space>}
               description={
                 <Space direction="vertical" size={4} className="side-stack">
-                  <Text type="secondary">{row.repo_name || `Repo ${row.repo_id}`} · 配置 {row.configured_branch || "main"}</Text>
+                  <Text type="secondary">{deploymentScopeText(row)} · 配置 {row.configured_branch || "main"}</Text>
                   <Text>{deploymentVersionText(row, nowMs)}</Text>
                   {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{shortDeploymentVerifyMessage(row)}</Text>}
                   <Text type="secondary">
-                    最近执行：{row.latest_action || "-"} · {row.latest_at ? `${formatUnixTime(row.latest_at)} · ${deployedAgeText(row.latest_at, nowMs)}` : "-"}
+                    最近执行：{productText(row.latest_action || "-")} · {row.latest_at ? `${formatUnixTime(row.latest_at)} · ${deployedAgeText(row.latest_at, nowMs)}` : "-"}
                   </Text>
                 </Space>
               }
@@ -855,9 +933,9 @@ function PipelineTable({
       title: "流水线",
       width: 210,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{row.repo_name} #{row.number}</Text>
-          <Text type="secondary">{row.event || "manual"}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text strong ellipsis={{ tooltip: `${productText(row.repo_name)} #${row.number}` }}>{productText(row.repo_name)} #{row.number}</Text>
+          <Text type="secondary">{pipelineKindText(row)}</Text>
         </Space>
       )
     },
@@ -865,8 +943,8 @@ function PipelineTable({
       title: "代码版本",
       width: 180,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
-          <Text>{row.branch || "-"}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text ellipsis={{ tooltip: row.branch || "-" }}>{row.branch || "-"}</Text>
           <Text type="secondary">{(row.commit || "").slice(0, 8) || "-"}</Text>
         </Space>
       )
@@ -875,8 +953,8 @@ function PipelineTable({
       title: "动作",
       width: 190,
       render: (_, row) => (
-        <Space direction="vertical" size={0}>
-          <Text>{pipelineTaskText(row)}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text ellipsis={{ tooltip: pipelineTaskText(row) }}>{pipelineTaskText(row)}</Text>
           {pipelineVariableHint(row) && (
             <Tooltip title={pipelineVariableHint(row)}>
               <Text type="secondary" className="pipeline-variable-hint">{pipelineVariableHint(row)}</Text>
@@ -888,12 +966,12 @@ function PipelineTable({
     {
       title: "触发",
       width: 170,
-      render: (_, row) => <Text type="secondary">{pipelineTriggerText(row)}</Text>
+      render: (_, row) => <Text type="secondary" ellipsis={{ tooltip: pipelineTriggerText(row) }}>{pipelineTriggerText(row)}</Text>
     },
     {
       title: "时间",
       width: 150,
-      render: (_, row) => <Text type="secondary">{pipelineTimeText(row)}</Text>
+      render: (_, row) => <Text type="secondary" ellipsis={{ tooltip: pipelineTimeText(row) }}>{pipelineTimeText(row)}</Text>
     },
     {
       title: "耗时",
@@ -941,6 +1019,7 @@ function PipelineTable({
         tableAlertRender={false}
         pagination={{ pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 30], showTotal: (total) => `共 ${total} 条` }}
         scroll={{ x: 1120 }}
+        tableLayout="fixed"
       />
       <List
         className="mobile-pipeline-list"
@@ -959,7 +1038,7 @@ function PipelineTable({
             ].filter(Boolean)}
           >
             <List.Item.Meta
-              title={<Space><Text strong>{row.repo_name} #{row.number}</Text><Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag></Space>}
+              title={<Space><Text strong>{productText(row.repo_name)} #{row.number}</Text><Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag></Space>}
               description={
                 <Space direction="vertical" size={4} className="side-stack">
                   <Text type="secondary">{row.branch || "-"} · {(row.commit || "").slice(0, 8) || "-"}</Text>
@@ -993,7 +1072,8 @@ export function PipelineSummaryDrawer({
   const pipeline = summary?.pipeline;
   return (
     <Drawer
-      title={pipeline ? `${pipeline.repo_name || "Repo"} #${pipeline.number}` : "流水线详情"}
+      className="pipeline-summary-drawer"
+      title={pipeline ? `${productText(pipeline.repo_name || "Repo")} #${pipeline.number}` : "流水线详情"}
       open={open}
       onClose={onClose}
       width={720}
@@ -1481,7 +1561,7 @@ function MonitoringContainerTable({ rows }: { rows: MonitoringContainer[] }) {
   );
 }
 
-export function InfrastructureLinks({ tasks }: { tasks: Task[] }) {
+export function InfrastructureLinks({ tasks, compact = false }: { tasks: Task[]; compact?: boolean }) {
   const links = tasks.filter((item) => item.external_url);
   const columns: ColumnsType<Task> = [
     {
@@ -1518,12 +1598,14 @@ export function InfrastructureLinks({ tasks }: { tasks: Task[] }) {
 
   return (
     <Space direction="vertical" size={16} className="side-stack">
-      <Card className="page-head-card">
-        <Space direction="vertical" size={4}>
-          <Title level={4}>基础设施入口</Title>
-          <Text type="secondary">Woodpecker、监控、日志和外部控制台集中在这里。</Text>
-        </Space>
-      </Card>
+      {!compact && (
+        <Card className="page-head-card">
+          <Space direction="vertical" size={4}>
+            <Title level={4}>基础设施入口</Title>
+            <Text type="secondary">Woodpecker、监控、日志和外部控制台集中在这里。</Text>
+          </Space>
+        </Card>
+      )}
       <Card>
         <Table
           className="desktop-infra-table"
@@ -1589,7 +1671,7 @@ function AuditLogView({
       width: 220,
       render: (_, row) => (
         <Space direction="vertical" size={0}>
-          <Text strong>{row.task_title || row.task_id}</Text>
+          <Text strong>{productText(row.task_title || row.task_id)}</Text>
           <Text type="secondary">{repoNameByID(state, row.repo_id)} · {row.branch || "-"}</Text>
         </Space>
       )
@@ -1823,7 +1905,7 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
   }
 
   useEffect(() => {
-    lookupForm.setFieldsValue({ owner: "tangfire", name: "zephyr" });
+    lookupForm.setFieldsValue({ owner: PRODUCT_REPO_OWNER, name: PRODUCT_REPO_NAME });
     loadRepos();
   }, []);
 
@@ -1905,7 +1987,7 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
         <Space wrap size={[4, 4]}>
           <Tag color={row.active ? "green" : "gold"}>{row.active ? "已启用" : "未启用"}</Tag>
           <Tag>{row.private ? "私有" : "公开"}</Tag>
-          {configured[String(row.id)] && <Tag color="blue">Zephyr 已保存</Tag>}
+          {configured[String(row.id)] && <Tag color="blue">{PRODUCT_NAME} 已保存</Tag>}
         </Space>
       )
     },
@@ -1919,7 +2001,7 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
       render: (_, row) => (
         <Space>
           <Button size="small" loading={savingID === row.id} onClick={() => saveRepo(row)}>
-            保存到 Zephyr
+            保存到 {PRODUCT_NAME}
           </Button>
           {row.forge_url && <Button size="small" href={row.forge_url} target="_blank" icon={<ExternalLink size={14} />} />}
         </Space>
@@ -1927,26 +2009,31 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
     }
   ];
 
-  const zephyrEnabled = repos.some((repo) => (repo.full_name || "").toLowerCase() === "tangfire/zephyr");
+  const productRepoFullName = `${PRODUCT_REPO_OWNER}/${PRODUCT_REPO_NAME}`.toLowerCase();
+  const legacyRepoFullName = `${PRODUCT_REPO_OWNER}/${LEGACY_PRODUCT_REPO_NAME}`.toLowerCase();
+  const productRepoEnabled = repos.some((repo) => {
+    const fullName = (repo.full_name || "").toLowerCase();
+    return fullName === productRepoFullName || fullName === legacyRepoFullName;
+  });
 
   return (
     <Space direction="vertical" size={16} className="side-stack">
-      {!zephyrEnabled && (
+      {!productRepoEnabled && (
         <Alert
           type="warning"
           showIcon
-          message="Woodpecker 里还没有启用 Zephyr 仓库"
-          description="如果 lookup tangfire/zephyr 仍然 404，通常是 GitHub OAuth 没授权到这个仓库，先去 Woodpecker 的添加仓库或 GitHub OAuth 权限里处理。"
+          message={`Woodpecker 里还没有启用 ${PRODUCT_NAME} 仓库`}
+          description={`如果 lookup ${PRODUCT_REPO_OWNER}/${PRODUCT_REPO_NAME} 仍然 404，通常是 GitHub OAuth 没授权到这个仓库，先去 Woodpecker 的添加仓库或 GitHub OAuth 权限里处理。`}
           action={state.links.woodpecker ? <Button size="small" href={state.links.woodpecker} target="_blank">打开 Woodpecker</Button> : undefined}
         />
       )}
       <Card title="查找并启用仓库">
         <Form form={lookupForm} layout="inline" onFinish={lookup} className="inline-create-form">
           <Form.Item label="Owner" name="owner" rules={[{ required: true, message: "请输入 owner" }]}>
-            <Input placeholder="tangfire" />
+            <Input placeholder={PRODUCT_REPO_OWNER} />
           </Form.Item>
           <Form.Item label="仓库名" name="name" rules={[{ required: true, message: "请输入仓库名" }]}>
-            <Input placeholder="zephyr" />
+            <Input placeholder={PRODUCT_REPO_NAME} />
           </Form.Item>
           <Button type="primary" htmlType="submit" loading={lookupLoading}>
             查询
@@ -1965,7 +2052,7 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
               <Space wrap>
                 {lookupResult.id ? (
                   <Button type="primary" loading={savingID === lookupResult.id} onClick={() => saveRepo(lookupResult)}>
-                    保存到 Zephyr
+                    保存到 {PRODUCT_NAME}
                   </Button>
                 ) : (
                   <Button type="primary" loading={lookupLoading} onClick={() => activateAndSave(lookupResult)}>
@@ -2045,7 +2132,7 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
       <Alert
         type="info"
         showIcon
-        message="这里维护 Zephyr 的可视化接入配置"
+        message={`这里维护 ${PRODUCT_NAME} 的可视化接入配置`}
         description="URL、监控主机、外部入口会回显；Woodpecker token 和 Beszel 密码只显示是否已配置，留空保存会保留原值。"
       />
       <ProCard
@@ -2078,7 +2165,7 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
         <ProCard title="核心服务" className="setup-form-card">
           <Row gutter={12}>
             <Col xs={24} lg={8}>
-              <Form.Item label="Zephyr 公开地址" name="public_url" rules={[{ required: true, message: "请输入 Zephyr 公开地址" }]}>
+              <Form.Item label={`${PRODUCT_NAME} 公开地址`} name="public_url" rules={[{ required: true, message: `请输入 ${PRODUCT_NAME} 公开地址` }]}>
                 <Input placeholder="https://deploy.example.com" />
               </Form.Item>
             </Col>
@@ -2098,7 +2185,7 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
               <Form.Item
                 label="Woodpecker API token"
                 name="woodpecker_token"
-                extra={setup?.secrets?.woodpecker_token ? "已配置；留空保存会保留原 token。" : "未配置；保存后 Zephyr 才能触发流水线。"}
+                extra={setup?.secrets?.woodpecker_token ? "已配置；留空保存会保留原 token。" : `未配置；保存后 ${PRODUCT_NAME} 才能触发流水线。`}
               >
                 <Input.Password placeholder={setup?.secrets?.woodpecker_token ? "留空保留原 token" : "填入 Woodpecker token"} autoComplete="new-password" />
               </Form.Item>
@@ -2279,7 +2366,7 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
                     </Form.Item>
                   </Card>
                 ))}
-                {!fields.length && <Text type="secondary">暂无额外入口；Zephyr、Woodpecker、Beszel、Grafana 会自动显示。</Text>}
+                {!fields.length && <Text type="secondary">暂无额外入口；{PRODUCT_NAME}、Woodpecker、Beszel、Grafana 会自动显示。</Text>}
               </Space>
             )}
           </Form.List>
@@ -2359,7 +2446,7 @@ function TaskConfigView({
             title: "任务",
             render: (_, row) => (
               <Space direction="vertical" size={0}>
-                <Text strong>{row.title}</Text>
+                <Text strong>{productText(row.title)}</Text>
                 <Space size={4}>
                   {row.builtin && <Tag>内置</Tag>}
                   {row.custom && <Tag color="blue">自定义</Tag>}
@@ -2402,7 +2489,7 @@ function TaskConfigView({
   );
 }
 
-export function Docs({ state }: { state: StateResponse }) {
+export function Docs({ state, compact = false }: { state: StateResponse; compact?: boolean }) {
   const data = [
     ["部署任务", "Woodpecker Repo ID / 默认分支", "DEPLOY_ACTION=deploy，建议设置 ZEPHYR_PROJECT_ID、ZEPHYR_DEPLOY_MARKER_PATH、ZEPHYR_DEPLOY_VERIFY_URL"],
     ["回退任务", "同一 Repo / 同一项目 ID", "DEPLOY_ACTION=rollback，确认词建议 ROLLBACK"],
@@ -2412,7 +2499,7 @@ export function Docs({ state }: { state: StateResponse }) {
   ];
   return (
     <Space direction="vertical" size={16} className="side-stack">
-      <Card title="部署参数手册" extra={<Button href={state.links.woodpecker} target="_blank" icon={<ExternalLink size={16} />}>打开 Woodpecker</Button>}>
+      <Card title={compact ? "参数手册" : "部署参数手册"} extra={<Button href={state.links.woodpecker} target="_blank" icon={<ExternalLink size={16} />}>打开 Woodpecker</Button>}>
         <Table
           rowKey={(row) => row[0]}
           pagination={false}
@@ -2429,7 +2516,7 @@ export function Docs({ state }: { state: StateResponse }) {
         showIcon
         icon={<FileText size={18} />}
         message="磁盘清理策略"
-        description="建议把清理动作放进独立 Woodpecker 任务，并在脚本里保护正在运行的 CI 容器、Zephyr 镜像和业务关键卷。"
+        description={`建议把清理动作放进独立 Woodpecker 任务，并在脚本里保护正在运行的 CI 容器、${PRODUCT_NAME} 镜像和业务关键卷。`}
       />
     </Space>
   );
@@ -2578,7 +2665,7 @@ export function branchOptionsForRepo(state: StateResponse, repoID: number, confi
 }
 
 function pipelineTaskText(row: Pipeline): string {
-  if (row.zefire_task_title) return row.zefire_task_title;
+  if (row.zefire_task_title) return productText(row.zefire_task_title);
   const variables = row.variables || {};
   const action = variables.DEPLOY_ACTION || variables.deploy_action || "";
   const target = variables.DEPLOY_TARGET || variables.deploy_target || "";
@@ -2590,14 +2677,43 @@ function pipelineTaskText(row: Pipeline): string {
   return row.event || "流水线";
 }
 
+function pipelineKindText(row: Pipeline): string {
+  if (row.event === "manual") return "手动触发";
+  if (row.event === "push") return "Git push";
+  return row.event || "流水线";
+}
+
 function pipelineVariableHint(row: Pipeline): string {
   const variables = row.variables || {};
-  const entries = Object.entries(variables).filter(([key]) => !isSensitiveVariable(key));
+  const preferredKeys = [
+    "DEPLOY_ACTION",
+    "DEPLOY_TARGET",
+    "SOURCE_BRANCH",
+    "BUILD_SERVICES",
+    "DEPLOY_SERVICES",
+    "DEPLOY_STRATEGY",
+    "CLEANUP_MODE",
+    "FORCE_DEPLOY"
+  ];
+  const preferred = preferredKeys
+    .filter((key) => variables[key])
+    .map((key) => [key, variables[key]] as [string, string]);
+  const fallback = Object.entries(variables).filter(([key]) => !isSensitiveVariable(key) && !isNoisyPipelineVariable(key));
+  const entries = [...preferred, ...fallback.filter(([key]) => !preferred.some(([used]) => used === key))];
   if (!entries.length) return "";
   return entries
     .slice(0, 2)
-    .map(([key, value]) => `${key}=${value || "-"}`)
+    .map(([key, value]) => `${key}=${shortPipelineVariableValue(value || "-")}`)
     .join(" · ");
+}
+
+function isNoisyPipelineVariable(key: string): boolean {
+  return /MARKER|HEALTH|URL|PATH|DIR|SSH|CACHE|META|PREFIX/i.test(key);
+}
+
+function shortPipelineVariableValue(value: string): string {
+  const text = String(value || "-");
+  return text.length > 32 ? `${text.slice(0, 29)}...` : text;
 }
 
 function isSensitiveVariable(key: string): boolean {
@@ -2610,7 +2726,7 @@ function pipelineTriggerText(row: Pipeline): string {
     if (row.event === "push") return actor ? `Git push：${actor}` : "Git push";
     return actor ? `Woodpecker：${actor}` : "外部触发/未记录";
   }
-  return ["Zephyr：" + row.zefire_triggered_by, formatShortTime(row.zefire_triggered_at)]
+  return [PRODUCT_NAME + "：" + row.zefire_triggered_by, formatShortTime(row.zefire_triggered_at)]
     .filter(Boolean)
     .join(" · ");
 }
@@ -2713,6 +2829,26 @@ function repoName(state: StateResponse, task: Task): string {
   return task.repo_name || state.repos[String(task.repo_id)] || `Repo ${task.repo_id}`;
 }
 
+function cleanGroupLabel(value?: string): string {
+  const label = String(value || "").trim();
+  if (!label || label === "未归类" || label === "默认模块") return "";
+  return productText(label);
+}
+
+function taskGroupLabel(state: StateResponse, task: Task): string {
+  return cleanGroupLabel(task.group) || repoName(state, task);
+}
+
+function taskDescriptionLine(state: StateResponse, task: Task): string {
+  return productText(task.description) || taskGroupLabel(state, task);
+}
+
+function deploymentScopeText(row: DeploymentStatus): string {
+  const group = cleanGroupLabel(row.group);
+  const repo = row.repo_name || `Repo ${row.repo_id}`;
+  return group ? `${group} · ${repo}` : repo;
+}
+
 function taskToPipelinePreview(state: StateResponse, task: Task): Pipeline {
   return {
     number: 0,
@@ -2732,6 +2868,12 @@ function taskToPipelinePreview(state: StateResponse, task: Task): Pipeline {
 
 function repoNameByID(state: StateResponse, repoID: number): string {
   return state.repos[String(repoID)] || `Repo ${repoID}`;
+}
+
+function productText(value?: string): string {
+  return String(value || "")
+    .replace(/Zefire(?:\s+(?:Deploy|Cloud))?/g, PRODUCT_NAME)
+    .replace(/Zephyr/g, PRODUCT_NAME);
 }
 
 function riskLabel(risk: Risk): string {
@@ -2842,12 +2984,43 @@ function deploymentStatusForTask(task: Task, statuses: DeploymentStatus[]): Depl
   return statuses.find((item) => item.id === key || (item.repo_id === task.repo_id && normalizeKey(item.group || item.name) === normalizeKey(task.group || task.title)));
 }
 
-function deploymentActionsForStatus(row: DeploymentStatus, tasks: Task[]): { deploy?: Task; rollback?: Task } {
-  const candidates = tasks.filter((task) => !task.external_url && (taskProjectKey(task) === row.id || (task.repo_id === row.repo_id && normalizeKey(task.group || task.title) === normalizeKey(row.group || row.name))));
+function deploymentActionsForStatus(row: DeploymentStatus, tasks: Task[]): { deploy?: Task; rollback?: Task; extras: Task[] } {
+  const candidates = tasks.filter((task) => !task.external_url && taskMatchesDeploymentStatus(task, row));
+  const deploy = preferredDeployTask(candidates);
+  const rollback = candidates.find((task) => isRollbackTask(task));
   return {
-    deploy: candidates.find((task) => !isRollbackTask(task) && !isCleanupTask(task)),
-    rollback: candidates.find((task) => isRollbackTask(task))
+    deploy,
+    rollback,
+    extras: candidates.filter((task) => isDeploymentLikeTask(task) && task.id !== deploy?.id && task.id !== rollback?.id)
   };
+}
+
+function deploymentManagedTaskIDs(tasks: Task[], statuses: DeploymentStatus[]): string[] {
+  const ids = new Set<string>();
+  for (const status of statuses) {
+    const actions = deploymentActionsForStatus(status, tasks);
+    if (actions.deploy) ids.add(actions.deploy.id);
+    if (actions.rollback) ids.add(actions.rollback.id);
+    for (const task of actions.extras) ids.add(task.id);
+  }
+  return Array.from(ids);
+}
+
+function taskMatchesDeploymentStatus(task: Task, row: DeploymentStatus): boolean {
+  if (taskProjectKey(task) === row.id) return true;
+  if (task.repo_id !== row.repo_id) return false;
+  const taskKey = normalizeKey([task.id, task.title, task.group, Object.values(task.variables || {}).join(" ")].join(" "));
+  const rowKeys = [row.id, row.name, row.group]
+    .map((item) => normalizeKey(item))
+    .filter((item) => item.length >= 2);
+  if (rowKeys.some((key) => taskKey.includes(key))) return true;
+  const group = normalizeKey(task.group || "");
+  return Boolean(group && rowKeys.includes(group));
+}
+
+function preferredDeployTask(tasks: Task[]): Task | undefined {
+  const deployTasks = tasks.filter((task) => isDeploymentLikeTask(task) && !isRollbackTask(task) && !isCleanupTask(task));
+  return deployTasks.find((task) => !isForceDeployTask(task)) || deployTasks[0];
 }
 
 function taskProjectKey(task: Task): string {
@@ -2857,12 +3030,34 @@ function taskProjectKey(task: Task): string {
 }
 
 function normalizeKey(value: string): string {
-  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_-]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 function isCleanupTask(task: Task): boolean {
   const action = String(task.variables?.DEPLOY_ACTION || "").toLowerCase();
   return action.includes("cleanup") || action.includes("clean") || action.includes("disk");
+}
+
+function isRestartTask(task: Task): boolean {
+  const action = String(task.variables?.DEPLOY_ACTION || "").toLowerCase();
+  return action.includes("restart") || /重启|restart/i.test(task.title);
+}
+
+function isForceDeployTask(task: Task): boolean {
+  const variables = task.variables || {};
+  return String(variables.FORCE_DEPLOY || variables.FORCE || "").toLowerCase() === "true" || /强制|force/i.test(task.title);
+}
+
+function isDeploymentLikeTask(task: Task): boolean {
+  if (isCleanupTask(task) || isRestartTask(task)) return false;
+  if (isRollbackTask(task)) return true;
+  const action = String(task.variables?.DEPLOY_ACTION || "").toLowerCase();
+  if (["deploy", "site", "observability", "publish", "release", "zefire", "zephyr", "peapod"].includes(action)) return true;
+  return /部署|发布|deploy|publish|release/i.test(task.title);
 }
 
 function mobileDeploymentActions(
@@ -2888,7 +3083,53 @@ function mobileDeploymentActions(
       </Button>
     );
   }
+  if (actions.extras.length) {
+    out.push(
+      <DeploymentExtraActions
+        key="extras"
+        actions={actions.extras}
+        currentUser={currentUser}
+        triggeringTaskIDSet={triggeringTaskIDSet}
+        onRun={onRun}
+      />
+    );
+  }
   return out;
+}
+
+function DeploymentExtraActions({
+  actions,
+  currentUser,
+  triggeringTaskIDSet,
+  onRun
+}: {
+  actions: Task[];
+  currentUser: User;
+  triggeringTaskIDSet: Set<string>;
+  onRun: (task: Task) => void;
+}) {
+  if (!actions.length) return null;
+  return (
+    <Dropdown
+      trigger={["click"]}
+      menu={{
+        items: actions.map((task) => ({
+          key: task.id,
+          label: productText(task.title),
+          danger: task.risk === "danger",
+          disabled: triggeringTaskIDSet.has(task.id) || !canRunTask(currentUser, task)
+        })),
+        onClick: ({ key }) => {
+          const task = actions.find((item) => item.id === key);
+          if (task && canRunTask(currentUser, task) && !triggeringTaskIDSet.has(task.id)) {
+            onRun(task);
+          }
+        }
+      }}
+    >
+      <Button size="small">更多</Button>
+    </Dropdown>
+  );
 }
 
 function monitoringSourceText(source: string): string {

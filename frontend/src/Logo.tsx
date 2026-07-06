@@ -1,16 +1,22 @@
-type ZephyrLogoProps = {
+import { PRODUCT_NAME } from "./brand";
+
+type PeapodLogoProps = {
   className?: string;
   title?: string;
 };
 
-export function ZephyrLogo({ className = "", title }: ZephyrLogoProps) {
+export function PeapodLogo({ className = "", title }: PeapodLogoProps) {
   return (
     <img
-      className={`zephyr-logo ${className}`.trim()}
-      src="/zephyr-logo.svg?v=bean"
+      className={`peapod-logo ${className}`.trim()}
+      src="/peapod-logo.svg?v=pea"
       alt={title || ""}
       aria-hidden={title ? undefined : true}
       draggable={false}
     />
   );
+}
+
+export function ZephyrLogo(props: PeapodLogoProps) {
+  return <PeapodLogo title={PRODUCT_NAME} {...props} />;
 }

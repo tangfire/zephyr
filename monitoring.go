@@ -122,7 +122,7 @@ func (a *App) monitoringSummary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, MonitoringSummary{
 			Hosts:          []MonitoringHost{},
 			Containers:     []MonitoringContainer{},
-			Alerts:         []MonitoringAlert{{Level: "warning", Title: "监控未启用", Message: "Zephyr monitoring service is not configured"}},
+			Alerts:         []MonitoringAlert{{Level: "warning", Title: "监控未启用", Message: "Peapod monitoring service is not configured"}},
 			Links:          a.monitoringLinks(),
 			CheckedAt:      time.Now().Format(time.RFC3339),
 			Source:         "degraded",

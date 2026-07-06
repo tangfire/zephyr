@@ -54,5 +54,5 @@ fi
 echo
 echo "Next:"
 echo "  1. Edit .env: WOODPECKER_TOKEN, public URLs, Beszel account, optional DB DSN."
-echo "  2. Edit data/zephyr/tasks.json or use Zephyr Settings after login."
+echo "  2. Edit data/zephyr/tasks.json or use Peapod Settings after login."
 echo "  3. Run: docker compose up -d --build"
