@@ -830,6 +830,19 @@ body {
   margin-top: 16px;
 }
 
+.settings-mobile-nav-card {
+  display: none;
+}
+
+.profile-card {
+  height: 100%;
+}
+
+.profile-card .ant-card-body,
+.users-card .ant-card-body {
+  padding: 18px !important;
+}
+
 .mobile-task-list,
 .mobile-deployment-list,
 .mobile-pipeline-list,
@@ -1265,6 +1278,37 @@ body {
 
   .settings-tabs .ant-tabs-nav-wrap {
     overflow: auto hidden !important;
+  }
+
+  .settings-mobile-nav-card {
+    display: block;
+  }
+
+  .settings-mobile-nav-card .ant-card-body {
+    padding: 12px !important;
+  }
+
+  .settings-mobile-content {
+    min-width: 0;
+  }
+
+  .profile-grid {
+    row-gap: 10px !important;
+  }
+
+  .profile-card .ant-card-head,
+  .users-card .ant-card-head {
+    min-height: 44px !important;
+  }
+
+  .profile-card .ant-card-body,
+  .users-card .ant-card-body {
+    padding: 14px !important;
+  }
+
+  .profile-card .ant-btn,
+  .users-card .inline-create-form .ant-btn {
+    width: 100%;
   }
 
   .inline-create-form {

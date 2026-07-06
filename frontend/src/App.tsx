@@ -628,7 +628,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
         onOk={() => runForm.submit()}
         okText="执行"
         cancelText="取消"
-        forceRender
+        destroyOnHidden
         okButtonProps={{ danger: runTask?.risk === "danger" }}
       >
         <Form form={runForm} layout="vertical" onFinish={executeTask}>
@@ -692,8 +692,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
           taskForm.resetFields();
         }}
         width={560}
-        forceRender
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={taskForm} layout="vertical" onFinish={saveCustomTask} initialValues={{ branch: "main", risk: "normal", group: "自定义任务" }}>
           <Form.Item label="任务 ID" name="id" extra={editingTask?.builtin ? "内置任务 ID 已锁定；保存后会覆盖默认配置，可随时恢复默认。" : "留空时会按标题生成；后续编辑建议保持不变。"}>

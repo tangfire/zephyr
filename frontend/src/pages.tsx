@@ -8,6 +8,7 @@ import {
   Dropdown,
   Drawer,
   Form,
+  Grid,
   Input,
   InputNumber,
   List,
@@ -438,6 +439,48 @@ export function SettingsPage({
 }) {
   const externalLinkCount = (state.tasks || []).filter((task) => task.external_url).length;
   const configurableTaskCount = (state.tasks || []).filter((task) => !task.external_url).length;
+  const screens = Grid.useBreakpoint();
+  const compactSettingsNav = !screens.md;
+  const [activeSetting, setActiveSetting] = useState("account");
+  const settingItems = [
+    {
+      key: "account",
+      label: "账号与成员",
+      shortLabel: "账号",
+      children: (
+        <Space direction="vertical" size={16} className="side-stack">
+          <Profile state={state} onReload={onReload} />
+          {state.current_user.role === "admin" && state.auth_mode === "db" && <Users />}
+        </Space>
+      )
+    },
+    {
+      key: "repos",
+      label: "仓库配置",
+      shortLabel: "仓库",
+      children: state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />
+    },
+    { key: "links", label: "基础设施入口", shortLabel: "入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
+    {
+      key: "tasks",
+      label: "部署任务",
+      shortLabel: "任务",
+      children: state.configurable ? (
+        <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
+      ) : (
+        <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
+      )
+    },
+    {
+      key: "setup",
+      label: "接入配置",
+      shortLabel: "接入",
+      children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
+    },
+    { key: "audit", label: "操作历史", shortLabel: "历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
+    { key: "docs", label: "参数文档", shortLabel: "文档", children: <Docs state={state} compact /> }
+  ];
+  const activeSettingItem = settingItems.find((item) => item.key === activeSetting) || settingItems[0];
   return (
     <Space direction="vertical" size={16} className="side-stack">
       <PageIntro
@@ -449,43 +492,33 @@ export function SettingsPage({
           { label: "入口", value: String(externalLinkCount) }
         ]}
       />
-      <Tabs
-        className="settings-tabs"
-        items={[
-          {
-            key: "account",
-            label: "账号",
-            children: (
-              <Space direction="vertical" size={16} className="side-stack">
-                <Profile state={state} onReload={onReload} />
-                {state.current_user.role === "admin" && state.auth_mode === "db" && <Users />}
-              </Space>
-            )
-          },
-          {
-            key: "repos",
-            label: "仓库",
-            children: state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />
-          },
-          { key: "links", label: "基础设施入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
-          {
-            key: "tasks",
-            label: "部署任务",
-            children: state.configurable ? (
-              <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
-            ) : (
-              <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
-            )
-          },
-          {
-            key: "setup",
-            label: "接入配置",
-            children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
-          },
-          { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
-          { key: "docs", label: "参数文档", children: <Docs state={state} compact /> }
-        ]}
-      />
+      {compactSettingsNav ? (
+        <Space direction="vertical" size={12} className="side-stack">
+          <Card className="settings-mobile-nav-card">
+            <Space direction="vertical" size={8} className="side-stack">
+              <Text type="secondary">设置分组</Text>
+              <Select
+                className="full-width"
+                value={activeSetting}
+                onChange={setActiveSetting}
+                options={settingItems.map((item) => ({ value: item.key, label: item.label }))}
+              />
+            </Space>
+          </Card>
+          <div className="settings-mobile-content">{activeSettingItem.children}</div>
+        </Space>
+      ) : (
+        <Tabs
+          className="settings-tabs"
+          activeKey={activeSetting}
+          onChange={setActiveSetting}
+          items={settingItems.map((item) => ({
+            key: item.key,
+            label: item.shortLabel,
+            children: item.children
+          }))}
+        />
+      )}
     </Space>
   );
 }
@@ -1801,9 +1834,9 @@ function Profile({ state, onReload }: { state: StateResponse; onReload: () => Pr
   }
 
   return (
-    <Row gutter={[16, 16]}>
+    <Row gutter={[16, 16]} className="profile-grid">
       <Col xs={24} lg={12}>
-        <Card title="账号资料">
+        <Card title="账号资料" className="profile-card">
           <Form form={profileForm} layout="vertical" onFinish={saveProfile}>
             <Form.Item label="账号名" name="username" rules={[{ required: true, message: "请输入账号名" }]}>
               <Input />
@@ -1821,7 +1854,7 @@ function Profile({ state, onReload }: { state: StateResponse; onReload: () => Pr
         </Card>
       </Col>
       <Col xs={24} lg={12}>
-        <Card title="修改密码">
+        <Card title="修改密码" className="profile-card">
           <Form form={passwordForm} layout="vertical" onFinish={changePassword}>
             <Form.Item label="旧密码" name="old_password" rules={[{ required: true }]}>
               <Input.Password />
@@ -1882,6 +1915,7 @@ function Users() {
 
   return (
     <Card
+      className="users-card"
       title="成员账号"
       extra={
         <Button icon={<RefreshCw size={16} />} loading={loadingUsers} onClick={() => loadUsers({ notify: true })}>
