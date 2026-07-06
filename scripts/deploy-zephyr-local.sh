@@ -69,7 +69,6 @@ if [ -d "$DEPLOY_DIR/frontend/dist" ]; then
 fi
 
 tar \
-  --exclude .git \
   --exclude .env \
   --exclude .env.host \
   --exclude 'data' \
@@ -88,6 +87,7 @@ install -m 0755 "$BUILD_BIN" "$DEPLOY_DIR/zephyr.next"
 mv -f "$DEPLOY_DIR/zephyr.next" "$DEPLOY_DIR/zephyr"
 
 chown -R "$owner_group" \
+  "$DEPLOY_DIR/.git" \
   "$DEPLOY_DIR/.woodpecker" \
   "$DEPLOY_DIR/config" \
   "$DEPLOY_DIR/docs" \
@@ -106,6 +106,8 @@ chown -R "$owner_group" \
   "$DEPLOY_DIR/pipeline_summary_test.go" \
   "$DEPLOY_DIR/store.go" \
   "$DEPLOY_DIR/zephyr" 2>/dev/null || true
+chown "$owner_group" "$DEPLOY_DIR" 2>/dev/null || true
+chmod 0755 "$DEPLOY_DIR" 2>/dev/null || true
 
 printf '%s\n' "${CI_COMMIT_SHA:-unknown}" > "$DEPLOY_DIR/.deploy/current-source-sha"
 printf '%s deploy %s pipeline=%s\n' "$(date -Is)" "${CI_COMMIT_SHA:-unknown}" "${CI_PIPELINE_NUMBER:-manual}" >> "$DEPLOY_DIR/.deploy/deploy-history.log"

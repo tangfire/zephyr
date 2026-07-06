@@ -1,4 +1,7 @@
 .env
+.env.host
+.deploy/
+*.bak.*
 data/
 mysql-data/
 zephyr
