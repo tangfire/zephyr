@@ -66,7 +66,9 @@ export function App() {
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: "#ef6b44",
+          colorPrimary: "#3d721d",
+          colorInfo: "#7cb758",
+          colorSuccess: "#5ea53a",
           borderRadius: 8,
           fontFamily:
             'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
@@ -74,7 +76,7 @@ export function App() {
         components: {
           Card: { borderRadiusLG: 8 },
           Button: { borderRadius: 7 },
-          Table: { headerBg: "#f7f9fb" }
+          Table: { headerBg: "#f5f9f1" }
         }
       }}
     >

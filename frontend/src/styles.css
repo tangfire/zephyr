@@ -6,14 +6,14 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  color: #20282d;
-  background: #f6f7f8;
+  color: #1f2a22;
+  background: #f5f8f2;
 }
 
 .app-layout {
   position: relative;
   min-height: 100vh;
-  background: #f6f7f8;
+  background: #f5f8f2;
 }
 
 .app-header {
@@ -26,8 +26,8 @@ body {
   gap: 20px;
   height: auto;
   padding: 12px 22px;
-  background: rgba(255, 255, 255, 0.92);
-  border-bottom: 1px solid #e7eaee;
+  background: rgba(255, 255, 255, 0.93);
+  border-bottom: 1px solid #dfe8d9;
   backdrop-filter: blur(16px);
 }
 
@@ -55,7 +55,7 @@ body {
   height: calc(100vh - 78px);
   padding: 14px 10px;
   background: #fff !important;
-  border-right: 1px solid #e7eaee;
+  border-right: 1px solid #dfe8d9;
 }
 
 .app-sidebar .ant-menu {
@@ -99,12 +99,12 @@ body {
   display: block;
   object-fit: contain;
   user-select: none;
-  filter: drop-shadow(0 10px 22px rgba(29, 37, 43, 0.14));
+  filter: drop-shadow(0 10px 22px rgba(39, 78, 31, 0.16));
 }
 
 .eyebrow {
   display: block;
-  color: #ef6b44;
+  color: #3d721d;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -121,13 +121,13 @@ body {
   min-height: 100vh;
   place-items: center;
   padding: 20px;
-  background: linear-gradient(180deg, #f8fafc, #eef2f6);
+  background: linear-gradient(180deg, #fbfef8, #edf5e8);
 }
 
 .login-card {
   width: min(420px, 100%);
   border-radius: 8px;
-  box-shadow: 0 28px 70px rgba(70, 45, 30, 0.12);
+  box-shadow: 0 28px 70px rgba(39, 78, 31, 0.12);
 }
 
 .login-form {
@@ -167,8 +167,8 @@ body {
   gap: 12px;
   min-width: 0;
   padding: 10px 12px;
-  background: #f9fafb;
-  border: 1px solid #e7eaee;
+  background: #fbfdf8;
+  border: 1px solid #dfe8d9;
   border-radius: 8px;
 }
 
@@ -189,9 +189,9 @@ body {
   gap: 8px;
   min-height: 28px;
   padding: 4px 8px;
-  color: #485056;
-  background: #f2f4f7;
-  border: 1px solid #e4e8ec;
+  color: #485348;
+  background: #f1f6ed;
+  border: 1px solid #dde8d5;
   border-radius: 999px;
   font-size: 12px;
   white-space: nowrap;
@@ -199,7 +199,7 @@ body {
 
 .setup-status-card {
   height: 100%;
-  border-color: #e6eaef;
+  border-color: #dfe8d9;
 }
 
 .setup-status-card .ant-card-body {
@@ -217,9 +217,9 @@ body {
 .command-block {
   margin: 0 !important;
   padding: 10px 12px;
-  color: #263038;
-  background: #f4f6f8;
-  border: 1px solid #e4e8ec;
+  color: #243027;
+  background: #f3f7ef;
+  border: 1px solid #dde8d5;
   border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   white-space: pre-wrap;
@@ -316,9 +316,9 @@ body {
 .monitor-pressure-grid,
 .monitor-alert-strip {
   min-width: 0;
-  border: 1px solid #e7eaee;
+  border: 1px solid #dfe8d9;
   border-radius: 8px;
-  background: #fbfcfd;
+  background: #fbfdf9;
 }
 
 .monitor-overview-head {
@@ -351,7 +351,7 @@ body {
   justify-content: center;
   gap: 6px;
   padding: 14px 16px;
-  border-left: 1px solid #edf0f3;
+  border-left: 1px solid #e5ede0;
 }
 
 .monitor-overview-item:first-child {
@@ -455,7 +455,7 @@ body {
   width: 46px;
   height: 10px;
   overflow: hidden;
-  background: #eee9e4;
+  background: #e8eee3;
   border-radius: 999px;
 }
 
@@ -544,8 +544,8 @@ body {
   overflow: hidden;
   padding: 24px;
   background:
-    radial-gradient(circle at 50% 44%, rgba(67, 184, 127, 0.08), transparent 32%),
-    linear-gradient(180deg, #f8fafc, #eef3f7);
+    radial-gradient(circle at 50% 44%, rgba(124, 183, 88, 0.12), transparent 32%),
+    linear-gradient(180deg, #fbfef8, #edf5e8);
 }
 
 .loading-scene {
@@ -589,7 +589,7 @@ body {
   left: -28%;
   height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, transparent, rgba(32, 42, 46, 0.12), rgba(67, 184, 127, 0.22), transparent);
+  background: linear-gradient(90deg, transparent, rgba(61, 114, 29, 0.12), rgba(157, 213, 123, 0.28), transparent);
   transform: translateX(-16%);
   animation: breeze-pass 4.8s ease-in-out infinite;
 }
@@ -618,8 +618,8 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: #43b87f;
-  box-shadow: 0 0 0 7px rgba(67, 184, 127, 0.12);
+  background: #7cb758;
+  box-shadow: 0 0 0 7px rgba(124, 183, 88, 0.14);
   animation: node-drift 4.8s ease-in-out infinite;
 }
 
@@ -636,7 +636,7 @@ body {
 
 .repo-lookup-card {
   margin-top: 14px;
-  background: #fbfcfd;
+    background: #fbfdf9;
 }
 
 @keyframes breeze-pass {
@@ -673,12 +673,12 @@ body {
   0%,
   100% {
     transform: translateY(0) scale(1);
-    filter: drop-shadow(0 10px 22px rgba(29, 37, 43, 0.14));
+    filter: drop-shadow(0 10px 22px rgba(39, 78, 31, 0.16));
   }
 
   50% {
     transform: translateY(-2px) scale(1.015);
-    filter: drop-shadow(0 14px 28px rgba(29, 37, 43, 0.18));
+    filter: drop-shadow(0 14px 28px rgba(39, 78, 31, 0.2));
   }
 }
 
@@ -778,7 +778,7 @@ body {
 
   .monitor-overview-item {
     min-height: 74px;
-    border-top: 1px solid #edf0f3;
+    border-top: 1px solid #e5ede0;
     border-left: 0;
     padding: 10px 12px;
   }
