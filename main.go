@@ -3657,16 +3657,13 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 </html>
 {{define "styles"}}` + css + `{{end}}`))
 
-const faviconDataURI = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='29' fill='%23202a2e'/%3E%3Cpath d='M17 30c8.5-8 22.8-8 31 0' fill='none' stroke='%23ef6b44' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M20 38c6.6-4.9 17.4-4.9 24 0' fill='none' stroke='%23fff7ee' stroke-width='4' stroke-linecap='round' stroke-linejoin='round' opacity='.86'/%3E%3Cpath d='M20 45h7l3-6 4 10 3.6-7H45' fill='none' stroke='%23fff7ee' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round' opacity='.88'/%3E%3Ccircle cx='17' cy='30' r='4' fill='%2343b87f' stroke='%23fff7ee' stroke-width='2.6'/%3E%3Ccircle cx='48' cy='30' r='4' fill='%2343b87f' stroke='%23fff7ee' stroke-width='2.6'/%3E%3C/svg%3E`
+const faviconDataURI = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='29' fill='%23202a2e'/%3E%3Cpath d='M17 35c8.2-6.8 21.5-7.2 30-1.1' fill='none' stroke='%23fff7ee' stroke-width='5.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M40 18 28 46' fill='none' stroke='%23ef6b44' stroke-width='5.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E`
 
 const zephyrLogo = `
 <svg class="zephyr-logo" viewBox="0 0 64 64" role="img" focusable="false" aria-hidden="true">
   <circle class="zephyr-logo-core" cx="32" cy="32" r="27" />
-  <path class="zephyr-logo-wind" d="M17 30c8.5-8 22.8-8 31 0" />
-  <path class="zephyr-logo-wind zephyr-logo-wind-soft" d="M20 38c6.6-4.9 17.4-4.9 24 0" />
-  <path class="zephyr-logo-monitor" d="M20 45h7l3-6 4 10 3.6-7H45" />
-  <circle class="zephyr-logo-node" cx="17" cy="30" r="4" />
-  <circle class="zephyr-logo-node" cx="48" cy="30" r="4" />
+  <path class="zephyr-logo-breeze" d="M17 35c8.2-6.8 21.5-7.2 30-1.1" />
+  <path class="zephyr-logo-accent" d="M40 18 28 46" />
 </svg>`
 
 const css = `
@@ -3737,10 +3734,8 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .brand-mark-small { width:44px; height:44px; margin-bottom:0; flex:0 0 auto; }
 .zephyr-logo { width:100%; height:100%; display:block; filter:drop-shadow(0 10px 22px rgba(70,45,30,.18)); }
 .zephyr-logo-core { fill:#202a2e; }
-.zephyr-logo-wind { fill:none; stroke:var(--accent); stroke-width:6; stroke-linecap:round; stroke-linejoin:round; }
-.zephyr-logo-wind-soft { stroke:#fff7ee; stroke-width:4; opacity:.86; }
-.zephyr-logo-monitor { fill:none; stroke:#fff7ee; stroke-width:2.8; stroke-linecap:round; stroke-linejoin:round; opacity:.88; }
-.zephyr-logo-node { fill:#43b87f; stroke:#fff7ee; stroke-width:2.6; }
+.zephyr-logo-breeze { fill:none; stroke:#fff7ee; stroke-width:5.6; stroke-linecap:round; stroke-linejoin:round; }
+.zephyr-logo-accent { fill:none; stroke:var(--accent); stroke-width:5.2; stroke-linecap:round; stroke-linejoin:round; }
 .brand-mark-small .zephyr-logo { filter:drop-shadow(0 8px 16px rgba(70,45,30,.12)); }
 label { display:block; margin:14px 0 8px; font-weight:800; }
 input, select { width:100%; height:42px; border:1px solid var(--line); border-radius:7px; padding:0 12px; background:#fff; color:var(--ink); }

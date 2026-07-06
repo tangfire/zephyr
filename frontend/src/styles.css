@@ -105,33 +105,20 @@ body {
   fill: #202a2e;
 }
 
-.zephyr-logo-wind {
+.zephyr-logo-breeze {
+  fill: none;
+  stroke: #fff7ee;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5.6;
+}
+
+.zephyr-logo-accent {
   fill: none;
   stroke: #ef6b44;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 6;
-}
-
-.zephyr-logo-monitor {
-  fill: none;
-  stroke: #fff7ee;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.8;
-  opacity: 0.88;
-}
-
-.zephyr-logo-wind-soft {
-  stroke: #fff7ee;
-  stroke-width: 4;
-  opacity: 0.86;
-}
-
-.zephyr-logo-node {
-  fill: #43b87f;
-  stroke: #fff7ee;
-  stroke-width: 2.6;
+  stroke-width: 5.2;
 }
 
 .eyebrow {
@@ -596,13 +583,9 @@ body {
   margin-bottom: 12px;
 }
 
-.loading-logo-active .zephyr-logo-wind {
-  stroke-dasharray: 46 18;
-  animation: logo-breeze 2.9s linear infinite;
-}
-
-.loading-logo-active .zephyr-logo-node {
-  animation: logo-pulse 2.4s ease-in-out infinite;
+.loading-logo-active .zephyr-logo-breeze {
+  stroke-dasharray: 42 16;
+  animation: logo-breeze 3s linear infinite;
 }
 
 .loading-title {
@@ -709,17 +692,6 @@ body {
 @keyframes logo-breeze {
   to {
     stroke-dashoffset: -128;
-  }
-}
-
-@keyframes logo-pulse {
-  0%,
-  100% {
-    opacity: 0.72;
-  }
-
-  50% {
-    opacity: 1;
   }
 }
 
