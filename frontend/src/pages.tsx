@@ -184,12 +184,6 @@ export function OverviewPage({
             <Button type="primary" icon={<Rocket size={16} />} onClick={() => onNavigate("deploy")}>
               进入部署
             </Button>
-            <Button onClick={() => onNavigate("pipelines")}>
-              查看流水线
-            </Button>
-            <Button onClick={() => onNavigate("monitoring")}>
-              查看监控
-            </Button>
             <Button icon={<RefreshCw size={16} />} onClick={onRefresh}>
               刷新
             </Button>
@@ -334,7 +328,7 @@ export function DeployPage({
     <Space direction="vertical" size={16} className="side-stack">
       <PageIntro
         title="部署"
-        description="确认线上版本、选择分支、触发部署或回退。低频任务配置放在设置里。"
+        description="以项目为中心确认版本、选择分支、触发部署或回退。低频配置放在设置里。"
         stats={[
           { label: "项目", value: String(rows.length || 0) },
           { label: "已验证", value: `${verifiedCount}/${rows.length || 0}`, tone: verifiedCount === rows.length && rows.length ? "success" : "normal" },
@@ -442,44 +436,57 @@ export function SettingsPage({
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
 }) {
+  const externalLinkCount = (state.tasks || []).filter((task) => task.external_url).length;
+  const configurableTaskCount = (state.tasks || []).filter((task) => !task.external_url).length;
   return (
-    <Tabs
-      className="settings-tabs"
-      items={[
-        {
-          key: "account",
-          label: "账号",
-          children: (
-            <Space direction="vertical" size={16} className="side-stack">
-              <Profile state={state} onReload={onReload} />
-              {state.current_user.role === "admin" && state.auth_mode === "db" && <Users />}
-            </Space>
-          )
-        },
-        {
-          key: "repos",
-          label: "仓库",
-          children: state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />
-        },
-        { key: "links", label: "基础设施入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
-        {
-          key: "tasks",
-          label: "部署任务",
-          children: state.configurable ? (
-            <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
-          ) : (
-            <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
-          )
-        },
-        {
-          key: "setup",
-          label: "接入配置",
-          children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
-        },
-        { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
-        { key: "docs", label: "参数文档", children: <Docs state={state} compact /> }
-      ]}
-    />
+    <Space direction="vertical" size={16} className="side-stack">
+      <PageIntro
+        title="设置"
+        description="成员、仓库、任务和底层入口集中维护。日常部署不用进入这里。"
+        stats={[
+          { label: "成员", value: state.auth_mode === "db" ? String(state.current_user.role === "admin" ? "可管理" : "个人") : "共享" },
+          { label: "任务", value: String(configurableTaskCount) },
+          { label: "入口", value: String(externalLinkCount) }
+        ]}
+      />
+      <Tabs
+        className="settings-tabs"
+        items={[
+          {
+            key: "account",
+            label: "账号",
+            children: (
+              <Space direction="vertical" size={16} className="side-stack">
+                <Profile state={state} onReload={onReload} />
+                {state.current_user.role === "admin" && state.auth_mode === "db" && <Users />}
+              </Space>
+            )
+          },
+          {
+            key: "repos",
+            label: "仓库",
+            children: state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />
+          },
+          { key: "links", label: "基础设施入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
+          {
+            key: "tasks",
+            label: "部署任务",
+            children: state.configurable ? (
+              <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
+            ) : (
+              <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
+            )
+          },
+          {
+            key: "setup",
+            label: "接入配置",
+            children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
+          },
+          { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
+          { key: "docs", label: "参数文档", children: <Docs state={state} compact /> }
+        ]}
+      />
+    </Space>
   );
 }
 
@@ -786,7 +793,7 @@ function DeploymentStatusTable({
   const columns: ProColumns<DeploymentStatus>[] = [
     {
       title: "项目",
-      width: 210,
+      width: 190,
       render: (_, row) => (
         <Space direction="vertical" size={0} className="table-cell-stack">
           <Text strong ellipsis={{ tooltip: productText(row.name) }}>{productText(row.name)}</Text>
@@ -796,7 +803,7 @@ function DeploymentStatusTable({
     },
     {
       title: "线上版本",
-      width: 250,
+      width: 220,
       render: (_, row) => (
         <Space direction="vertical" size={2} className="deployment-version-cell">
           {row.current_branch ? (
@@ -823,7 +830,7 @@ function DeploymentStatusTable({
     },
     {
       title: "最近执行",
-      width: 230,
+      width: 200,
       render: (_, row) => (
         <Space direction="vertical" size={0} className="table-cell-stack">
           <Space size={6}>
@@ -838,7 +845,7 @@ function DeploymentStatusTable({
     },
     {
       title: "上一成功版本",
-      width: 180,
+      width: 150,
       render: (_, row) => (
         <Space direction="vertical" size={0} className="table-cell-stack">
           <Text>{row.previous_branch || "-"}</Text>
@@ -849,7 +856,7 @@ function DeploymentStatusTable({
     },
     {
       title: "",
-      width: 240,
+      width: 180,
       render: (_, row) => {
         const actions = deploymentActionsForStatus(row, tasks);
         return (
@@ -888,7 +895,7 @@ function DeploymentStatusTable({
         options={false}
         tableAlertRender={false}
         pagination={false}
-        scroll={{ x: 1040 }}
+        scroll={{ x: 940 }}
         tableLayout="fixed"
       />
       <List
@@ -937,7 +944,7 @@ function PipelineTable({
   const columns: ProColumns<Pipeline>[] = [
     {
       title: "流水线",
-      width: 210,
+      width: 190,
       render: (_, row) => (
         <Space direction="vertical" size={0} className="table-cell-stack">
           <Text strong ellipsis={{ tooltip: `${productText(row.repo_name)} #${row.number}` }}>{productText(row.repo_name)} #{row.number}</Text>
@@ -947,7 +954,7 @@ function PipelineTable({
     },
     {
       title: "代码版本",
-      width: 180,
+      width: 140,
       render: (_, row) => (
         <Space direction="vertical" size={0} className="table-cell-stack">
           <Text ellipsis={{ tooltip: row.branch || "-" }}>{row.branch || "-"}</Text>
@@ -957,7 +964,7 @@ function PipelineTable({
     },
     {
       title: "动作",
-      width: 190,
+      width: 170,
       render: (_, row) => (
         <Space direction="vertical" size={0} className="table-cell-stack">
           <Text ellipsis={{ tooltip: pipelineTaskText(row) }}>{pipelineTaskText(row)}</Text>
@@ -971,32 +978,32 @@ function PipelineTable({
     },
     {
       title: "触发",
-      width: 170,
+      width: 140,
       render: (_, row) => <Text type="secondary" ellipsis={{ tooltip: pipelineTriggerText(row) }}>{pipelineTriggerText(row)}</Text>
     },
     {
       title: "时间",
-      width: 150,
+      width: 130,
       render: (_, row) => <Text type="secondary" ellipsis={{ tooltip: pipelineTimeText(row) }}>{pipelineTimeText(row)}</Text>
     },
     {
       title: "耗时",
-      width: 110,
+      width: 92,
       render: (_, row) => <Text type="secondary">{pipelineDurationText(row, nowMs)}</Text>
     },
     {
       title: "状态",
-      width: 92,
+      width: 82,
       render: (_, row) => <Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag>
     },
     {
       title: "进度",
-      width: 110,
+      width: 96,
       render: (_, row) => <Progress percent={pipelinePercent(row, nowMs)} size="small" status={progressStatus(row)} />
     },
     {
       title: "",
-      width: 128,
+      width: 118,
       render: (_, row) => (
         <Space>
           <Button size="small" onClick={() => onInspect(row)}>
@@ -1024,7 +1031,7 @@ function PipelineTable({
         options={false}
         tableAlertRender={false}
         pagination={{ pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 30], showTotal: (total) => `共 ${total} 条` }}
-        scroll={{ x: 1120 }}
+        scroll={{ x: 1060 }}
         tableLayout="fixed"
       />
       <List
@@ -1274,7 +1281,7 @@ function MonitoringResourceOverview({
   alerts: MonitoringAlert[];
   loading: boolean;
 }) {
-  const normalCount = hosts.filter((host) => monitoringStatusColor(host.status) === "success").length;
+  const normalCount = hosts.filter((host) => ["success", "gold"].includes(monitoringStatusColor(host.status))).length;
   const highestCPU = highestHostMetric(hosts, "cpu_percent");
   const highestMemory = highestHostMetric(hosts, "memory_percent");
   const highestDisk = highestHostMetric(hosts, "disk_percent");
@@ -1352,8 +1359,7 @@ function MonitoringSystemTable({
   const columns: ColumnsType<MonitoringHost> = [
     {
       title: <MonitoringColumnTitle icon={<Server size={15} />} label="系统" />,
-      width: 320,
-      fixed: "left",
+      width: 300,
       sorter: (a, b) => a.name.localeCompare(b.name),
       render: (_, row) => (
         <div className="monitor-system-cell">
@@ -1370,25 +1376,25 @@ function MonitoringSystemTable({
     },
     {
       title: <MonitoringColumnTitle icon={<Cpu size={15} />} label="CPU" />,
-      width: 132,
+      width: 118,
       sorter: (a, b) => (a.cpu_percent || 0) - (b.cpu_percent || 0),
       render: (_, row) => <CompactMetric value={row.cpu_percent || 0} />
     },
     {
       title: <MonitoringColumnTitle icon={<MemoryStick size={15} />} label="内存" />,
-      width: 142,
+      width: 124,
       sorter: (a, b) => (a.memory_percent || 0) - (b.memory_percent || 0),
       render: (_, row) => <CompactMetric value={row.memory_percent || 0} />
     },
     {
       title: <MonitoringColumnTitle icon={<HardDrive size={15} />} label="磁盘" />,
-      width: 142,
+      width: 124,
       sorter: (a, b) => (a.disk_percent || 0) - (b.disk_percent || 0),
       render: (_, row) => <CompactMetric value={row.disk_percent || 0} />
     },
     {
       title: <MonitoringColumnTitle icon={<Gauge size={15} />} label="负载" />,
-      width: 150,
+      width: 130,
       sorter: (a, b) => (a.load_1 || 0) - (b.load_1 || 0),
       render: (_, row) => (
         <Space size={6} className="monitor-load-cell">
@@ -1401,25 +1407,24 @@ function MonitoringSystemTable({
     },
     {
       title: <MonitoringColumnTitle icon={<Network size={15} />} label="网络" />,
-      width: 132,
+      width: 118,
       sorter: (a, b) => (a.network_bytes_per_second || 0) - (b.network_bytes_per_second || 0),
       render: (_, row) => <Text>{formatBytes(row.network_bytes_per_second || 0)}/s</Text>
     },
     {
       title: <MonitoringColumnTitle icon={<Clock3 size={15} />} label="运行时间" />,
-      width: 132,
+      width: 112,
       sorter: (a, b) => (a.uptime_seconds || 0) - (b.uptime_seconds || 0),
       render: (_, row) => <Text>{row.uptime || "-"}</Text>
     },
     {
       title: "来源",
-      width: 92,
+      width: 80,
       render: (_, row) => <Tag color={monitoringSourceColor(row.source)}>{monitoringSourceText(row.source)}</Tag>
     },
     {
       title: "操作",
-      width: 116,
-      fixed: "right",
+      width: 104,
       render: (_, row) => (
         <MonitoringHostActions
           cleanupTask={row.cleanup_task_id ? cleanupTasks.get(row.cleanup_task_id) : undefined}
@@ -1438,7 +1443,7 @@ function MonitoringSystemTable({
         columns={columns}
         dataSource={rows}
         pagination={false}
-        scroll={{ x: 1350 }}
+        scroll={{ x: 1110 }}
       />
       <List
         className="mobile-monitor-system-list"
@@ -1909,6 +1914,7 @@ function Users() {
         rowKey="id"
         dataSource={users}
         pagination={false}
+        scroll={{ x: 620 }}
         columns={[
           { title: "账号", dataIndex: "username" },
           { title: "姓名", dataIndex: "display_name" },
@@ -3192,7 +3198,7 @@ function monitoringSourceColor(source: string): string {
 function monitoringStatusColor(status: string): string {
   const value = String(status || "").toLowerCase();
   if (!value || value === "unknown") return "default";
-  if (["ok", "up", "online", "healthy", "active"].includes(value)) return "success";
+  if (["ok", "up", "online", "healthy", "active", "normal", "success"].includes(value)) return "success";
   if (["warning", "degraded"].includes(value)) return "gold";
   return "error";
 }
@@ -3200,7 +3206,8 @@ function monitoringStatusColor(status: string): string {
 function monitoringHostStatusText(status: string): string {
   const value = String(status || "").toLowerCase();
   if (!value || value === "unknown") return "未知";
-  if (["ok", "up", "online", "healthy", "active"].includes(value)) return "正常";
+  if (["ok", "up", "online", "healthy", "active", "normal", "success"].includes(value)) return "正常";
+  if (["warning", "degraded"].includes(value)) return "提醒";
   return status;
 }
 

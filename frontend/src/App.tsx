@@ -11,16 +11,18 @@ import {
   Layout,
   Menu,
   Modal,
+  Result,
   Row,
   Select,
   Space,
+  Spin,
   Tag,
   Typography,
   theme
 } from "antd";
-import { LogOut, Menu as MenuIcon } from "lucide-react";
+import { LogOut, Menu as MenuIcon, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, errorText } from "./api";
+import { api, errorText, isUnauthorized } from "./api";
 import { PRODUCT_DESCRIPTION, PRODUCT_NAME, PRODUCT_TAGLINE } from "./brand";
 import { PeapodLogo } from "./Logo";
 import type {
@@ -139,6 +141,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
   const { message, modal } = AntApp.useApp();
   const [state, setState] = useState<StateResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [runTask, setRunTask] = useState<Task | null>(null);
   const [runForm] = Form.useForm();
   const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
@@ -178,14 +181,16 @@ function Shell({ page }: { page: "home" | "docs" }) {
     try {
       const data = await api<StateResponse>("/api/state");
       setState(data);
+      setLoadError("");
       if (options.notify) {
         message.open({ type: "success", content: "状态已刷新", key: "state-refresh", duration: 1.8 });
       }
     } catch (error) {
-      if (String(error).includes("unauthorized")) {
-        window.location.href = "/login";
+      if (isUnauthorized(error)) {
+        window.location.replace("/login");
         return;
       }
+      setLoadError(errorText(error) || "状态加载失败");
       if (options.notify) {
         message.open({ type: "error", content: errorText(error) || "刷新失败", key: "state-refresh", duration: 4 });
       } else {
@@ -269,6 +274,10 @@ function Shell({ page }: { page: "home" | "docs" }) {
         message.open({ type: "success", content: "监控已刷新", key: "monitoring-refresh", duration: 1.8 });
       }
     } catch (error) {
+      if (isUnauthorized(error)) {
+        window.location.replace("/login");
+        return;
+      }
       if (options.notify) {
         message.open({ type: "error", content: errorText(error) || "监控刷新失败", key: "monitoring-refresh", duration: 4 });
       } else {
@@ -548,13 +557,13 @@ function Shell({ page }: { page: "home" | "docs" }) {
   }
 
   if (loading || !state) {
-    return <LoadingShell />;
+    return <LoadingShell error={loadError} onRetry={() => loadState({ notify: true })} />;
   }
 
   return (
     <Layout className="app-layout">
       <Header className="app-header">
-        <Space size={12}>
+        <Space size={12} className="header-brand">
           <Button className="mobile-nav-button" icon={<MenuIcon size={18} />} onClick={() => setMobileNavOpen(true)} />
           <PeapodLogo className="header-logo" title={PRODUCT_NAME} />
           <div>
@@ -600,7 +609,16 @@ function Shell({ page }: { page: "home" | "docs" }) {
           </Space>
         }
       >
+        <div className="mobile-nav-profile">
+          <Text strong>{state.current_user.display_name || state.current_user.username}</Text>
+          <Text type="secondary">{state.current_user.email || (state.current_user.role === "admin" ? "管理员" : "成员")}</Text>
+        </div>
         <Menu mode="inline" selectedKeys={[activePage]} items={navItems} onClick={({ key }) => navigate(key)} />
+        <div className="mobile-nav-footer">
+          <Button block icon={<LogOut size={16} />} onClick={logout}>
+            退出登录
+          </Button>
+        </div>
       </Drawer>
 
       <Modal
@@ -757,26 +775,37 @@ function Shell({ page }: { page: "home" | "docs" }) {
   );
 }
 
-function LoadingShell() {
+function LoadingShell({ error, onRetry }: { error?: string; onRetry?: () => void }) {
   return (
     <Layout className="app-layout">
       <Content className="loading-shell">
         <div className="loading-scene">
-          <div className="loading-breeze" aria-hidden="true">
-            <span className="breeze-line breeze-line-a" />
-            <span className="breeze-line breeze-line-b" />
-            <span className="breeze-line breeze-line-c" />
-            <span className="breeze-node breeze-node-a" />
-            <span className="breeze-node breeze-node-b" />
-          </div>
           <PeapodLogo className="loading-logo loading-logo-active" title={PRODUCT_NAME} />
           <Text className="eyebrow">{PRODUCT_TAGLINE}</Text>
           <Title level={4} className="loading-title">
             {PRODUCT_NAME}
           </Title>
-          <Text type="secondary" className="loading-caption">
-            同步状态中
-          </Text>
+          {error ? (
+            <Result
+              className="loading-result"
+              status="warning"
+              title="状态同步失败"
+              subTitle={error}
+              extra={
+                <Space wrap>
+                  <Button type="primary" icon={<RefreshCw size={16} />} onClick={onRetry}>
+                    重试
+                  </Button>
+                  <Button href="/login">重新登录</Button>
+                </Space>
+              }
+            />
+          ) : (
+            <Space className="loading-caption" size={10}>
+              <Spin size="small" />
+              <Text type="secondary">同步状态中</Text>
+            </Space>
+          )}
         </div>
       </Content>
     </Layout>
