@@ -44,6 +44,7 @@ Zephyr is intentionally configuration-driven.
 - Monitored hosts live in `ZEPHYR_MONITOR_HOSTS_JSON`.
 - External links live in `ZEPHYR_LINKS_JSON`.
 - User accounts can use MySQL through `ZEPHYR_DB_DSN`; otherwise Zephyr falls back to a single emergency password.
+- The default compose stack includes a local `zephyr-mysql` service for team accounts, audit logs, and setup state. You can later point `ZEPHYR_DB_DSN` to a managed MySQL instance without changing Zephyr code.
 
 The bundled `examples/` folder contains:
 
@@ -67,13 +68,15 @@ WOODPECKER_TOKEN=...
 WOODPECKER_AGENT_SECRET=...
 ```
 
-For real team usage, prefer database auth:
+For real team usage, keep database auth enabled. The default local Docker MySQL DSN looks like:
 
 ```env
-ZEPHYR_DB_DSN=zephyr:password@tcp(mysql-host:3306)/zephyr?parseTime=true&charset=utf8mb4&loc=Local
+ZEPHYR_DB_DSN=zephyr:password@tcp(zephyr-mysql:3306)/zephyr?parseTime=true&charset=utf8mb4&loc=Local
 ZEPHYR_BOOTSTRAP_USERNAME=admin
 ZEPHYR_BOOTSTRAP_PASSWORD=change-this-on-first-login
 ```
+
+To move to cloud MySQL later, create the same database and change only `ZEPHYR_DB_DSN`.
 
 Zephyr creates these tables automatically:
 

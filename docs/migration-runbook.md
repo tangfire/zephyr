@@ -21,6 +21,8 @@
 - Grafana dashboard、datasource、alert 配置。
 - Loki/Prometheus 数据是否需要保留。v1 可以不迁历史数据，只迁配置。
 
+默认建议：不要迁旧 Loki/Tempo/Prometheus 历史数据，只迁 Grafana dashboard、datasource、Alloy/Prometheus/Loki/Tempo 配置。历史日志通常体积大、价值衰减快，新运维机上线后重新积累更干净。
+
 ## 新机器安装
 
 ```bash
@@ -60,6 +62,16 @@ ZEPHYR_PASSWORD=change-me
 WOODPECKER_TOKEN=change-me
 WOODPECKER_AGENT_SECRET=change-me
 ```
+
+如果暂时不用云 MySQL，保留默认本地 Docker MySQL：
+
+```env
+ZEPHYR_DB_DSN=zephyr:password@tcp(zephyr-mysql:3306)/zephyr?parseTime=true&charset=utf8mb4&loc=Local
+ZEPHYR_MYSQL_BIND=127.0.0.1
+ZEPHYR_MYSQL_PORT=13307
+```
+
+以后切换云 MySQL 时，只需要把 `ZEPHYR_DB_DSN` 指到云 MySQL，并确认安全组只允许运维机访问。
 
 如果使用 MySQL 账号体系：
 
@@ -109,6 +121,17 @@ scp old-host:/opt/zefire-deploy/data/tasks.json /opt/zephyr/data/zephyr/tasks.js
 
 如果必须保留历史流水线，可迁移 Woodpecker 数据库和 volume，但要确保版本一致。
 
+如果旧 Woodpecker 正在运行，不要直接 `tar` 活跃 SQLite 文件做最终迁移。最终切换前建议短暂停旧 Woodpecker：
+
+```bash
+cd /opt/woodpecker
+docker compose stop woodpecker-server woodpecker-agent
+# 复制 woodpecker volume 到新机器
+docker compose start woodpecker-server woodpecker-agent
+```
+
+这样可以避免 `woodpecker.sqlite: file changed as we read it` 导致新库半截。
+
 ## 接入生产机和业务机
 
 在每台被管理机器上执行：
@@ -147,6 +170,15 @@ scp old-host:/opt/zefire-deploy/data/tasks.json /opt/zephyr/data/zephyr/tasks.js
 - `ci.example.com`
 - `beszel.example.com`
 - `grafana.example.com`
+
+如果新机器一开始没有域名，可以先用 IP + 端口验证：
+
+- Zephyr: `http://NEW_IP:8095`
+- Woodpecker: `http://NEW_IP:8000`
+- Beszel: `http://NEW_IP:8090`
+- Grafana: `http://NEW_IP:3000`
+
+但 GitHub OAuth、Webhook 回调、HTTPS 登录 Cookie 最终仍建议使用正式域名。
 
 切换后检查：
 

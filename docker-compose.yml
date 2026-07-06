@@ -22,12 +22,43 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - woodpecker-server
-      - beszel
-      - grafana
+      mysql:
+        condition: service_healthy
+      woodpecker-server:
+        condition: service_started
+      beszel:
+        condition: service_started
+      grafana:
+        condition: service_started
+
+  mysql:
+    image: ${ZEPHYR_MYSQL_IMAGE:-mysql:8.4}
+    container_name: ${ZEPHYR_MYSQL_CONTAINER_NAME:-zephyr-mysql}
+    restart: unless-stopped
+    logging: *default-logging
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=caching_sha2_password
+    environment:
+      MYSQL_DATABASE: ${ZEPHYR_DB_NAME:-zephyr}
+      MYSQL_USER: ${ZEPHYR_DB_USER:-zephyr}
+      MYSQL_PASSWORD: ${ZEPHYR_DB_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${ZEPHYR_DB_ROOT_PASSWORD:-change-me-root}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${ZEPHYR_MYSQL_BIND:-127.0.0.1}:${ZEPHYR_MYSQL_PORT:-13307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   woodpecker-server:
-    image: ${WOODPECKER_SERVER_IMAGE:-woodpeckerci/woodpecker-server:latest}
+    image: ${WOODPECKER_SERVER_IMAGE:-woodpeckerci/woodpecker-server:v3}
     container_name: ${WOODPECKER_SERVER_CONTAINER_NAME:-woodpecker-server}
     restart: unless-stopped
     logging: *default-logging
@@ -47,7 +78,7 @@ services:
       - woodpecker_server_data:/var/lib/woodpecker
 
   woodpecker-agent:
-    image: ${WOODPECKER_AGENT_IMAGE:-woodpeckerci/woodpecker-agent:latest}
+    image: ${WOODPECKER_AGENT_IMAGE:-woodpeckerci/woodpecker-agent:v3}
     container_name: ${WOODPECKER_AGENT_CONTAINER_NAME:-woodpecker-agent}
     restart: unless-stopped
     logging: *default-logging
@@ -150,6 +181,7 @@ services:
       - tempo_data:/var/tempo
 
 volumes:
+  mysql_data:
   woodpecker_server_data:
   woodpecker_agent_config:
   beszel_data:

@@ -16,13 +16,21 @@ if [ ! -f .env ]; then
   cp .env.example .env
   session_secret="$(rand_secret)"
   agent_secret="$(rand_secret)"
+  db_password="$(rand_secret)"
+  db_root_password="$(rand_secret)"
+  bootstrap_password="$(rand_secret)"
   tmp_file=".env.tmp"
   sed \
     -e "s/ZEPHYR_SESSION_SECRET=replace-with-random-secret/ZEPHYR_SESSION_SECRET=${session_secret}/" \
     -e "s/WOODPECKER_AGENT_SECRET=replace-with-agent-secret/WOODPECKER_AGENT_SECRET=${agent_secret}/" \
+    -e "s/ZEPHYR_DB_PASSWORD=replace-with-db-password/ZEPHYR_DB_PASSWORD=${db_password}/" \
+    -e "s/ZEPHYR_DB_ROOT_PASSWORD=replace-with-db-root-password/ZEPHYR_DB_ROOT_PASSWORD=${db_root_password}/" \
+    -e "s#ZEPHYR_DB_DSN=zephyr:replace-with-db-password@tcp(zephyr-mysql:3306)/zephyr#ZEPHYR_DB_DSN=zephyr:${db_password}@tcp(zephyr-mysql:3306)/zephyr#" \
+    -e "s/ZEPHYR_BOOTSTRAP_PASSWORD=change-me-at-first-login/ZEPHYR_BOOTSTRAP_PASSWORD=${bootstrap_password}/" \
     .env > "$tmp_file"
   mv "$tmp_file" .env
   echo "created .env"
+  echo "created bootstrap admin password in .env (ZEPHYR_BOOTSTRAP_PASSWORD)"
 else
   echo ".env already exists; keep it"
 fi
