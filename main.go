@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -882,18 +883,42 @@ func (a *App) state(w http.ResponseWriter, r *http.Request) {
 	}
 	woodpeckerErrors := []string{}
 	visibleRepos := a.configuredRepos()
+	type repoStateResult struct {
+		repoID    int
+		pipelines []Pipeline
+		branches  []string
+		errors    []string
+	}
+	results := make(chan repoStateResult, len(visibleRepos))
+	var wg sync.WaitGroup
 	for repoID := range visibleRepos {
-		rows, err := a.listPipelines(repoID, 30)
-		if err == nil {
-			pipelines[repoID] = rows
-		} else {
-			woodpeckerErrors = append(woodpeckerErrors, fmt.Sprintf("Repo %d 流水线：%v", repoID, err))
+		wg.Add(1)
+		go func(repoID int) {
+			defer wg.Done()
+			result := repoStateResult{repoID: repoID}
+			if rows, err := a.listPipelines(repoID, 24); err == nil {
+				result.pipelines = rows
+			} else {
+				result.errors = append(result.errors, fmt.Sprintf("Repo %d 流水线：%v", repoID, err))
+			}
+			if rows, err := a.listBranches(repoID); err == nil {
+				result.branches = rows
+			} else {
+				result.errors = append(result.errors, fmt.Sprintf("Repo %d 分支：%v", repoID, err))
+			}
+			results <- result
+		}(repoID)
+	}
+	wg.Wait()
+	close(results)
+	for result := range results {
+		if result.pipelines != nil {
+			pipelines[result.repoID] = result.pipelines
 		}
-		if rows, err := a.listBranches(repoID); err == nil {
-			branches[repoID] = rows
-		} else {
-			woodpeckerErrors = append(woodpeckerErrors, fmt.Sprintf("Repo %d 分支：%v", repoID, err))
+		if result.branches != nil {
+			branches[result.repoID] = result.branches
 		}
+		woodpeckerErrors = append(woodpeckerErrors, result.errors...)
 	}
 	if len(woodpeckerErrors) == 0 {
 		health["woodpecker"] = map[string]interface{}{"status": "ok", "message": "Woodpecker 状态已同步"}
@@ -1725,7 +1750,7 @@ func (a *App) listPipelines(repoID int, limit int) ([]Pipeline, error) {
 	if err != nil {
 		return nil, err
 	}
-	rows = a.hydratePipelineDetails(repoID, rows, 12)
+	rows = a.hydratePipelineDetails(repoID, rows, 6)
 	for index := range rows {
 		rows[index].Variables = sanitizeVariables(rows[index].Variables)
 	}
