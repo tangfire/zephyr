@@ -21,8 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	_ "embed"
 )
 
 const cookieName = "zephyr_session"
@@ -365,12 +363,6 @@ type AuditListResponse struct {
 	Records []AuditRecord `json:"records"`
 }
 
-//go:embed static/zefire-logo.png
-var zefireLogoPNG []byte
-
-//go:embed static/favicon.png
-var faviconPNG []byte
-
 var repos = map[int]string{}
 
 var tasks = []Task{}
@@ -412,9 +404,6 @@ func main() {
 	mux.HandleFunc("/api/custom-run", app.auth(app.customRun))
 	mux.HandleFunc("/api/pipelines/", app.auth(app.pipelineAction))
 	mux.HandleFunc("/api/audit", app.auth(app.audit))
-	mux.HandleFunc("/static/zefire-logo.png", servePNG(zefireLogoPNG, 24*time.Hour))
-	mux.HandleFunc("/favicon.png", servePNG(faviconPNG, 24*time.Hour))
-	mux.HandleFunc("/favicon.ico", servePNG(faviconPNG, 24*time.Hour))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok","service":"zephyr"}`))
@@ -665,18 +654,6 @@ func securityHeaders(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func servePNG(payload []byte, maxAge time.Duration) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if len(payload) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", int(maxAge.Seconds())))
-		http.ServeContent(w, r, r.URL.Path, time.Now(), bytes.NewReader(payload))
-	}
 }
 
 func (a *App) frontendAssets() http.Handler {
@@ -3439,12 +3416,12 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Zephyr</title>
-  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="` + faviconDataURI + `" />
   <style>{{template "styles"}}</style>
 </head>
 <body class="login-page">
   <main class="login-card">
-    <div class="brand-mark" aria-hidden="true"><img class="zefire-logo-img" src="/static/zefire-logo.png" alt="" /></div>
+    <div class="brand-mark" aria-hidden="true">` + zephyrLogo + `</div>
     <h1>Zephyr</h1>
     <p>基础设施部署控制台</p>
     {{if .Error}}<div class="error">密码不正确。</div>{{end}}
@@ -3468,13 +3445,13 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Zephyr</title>
-  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="` + faviconDataURI + `" />
   <style>{{template "styles"}}</style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand-lockup">
-      <div class="brand-mark brand-mark-small" aria-hidden="true"><img class="zefire-logo-img" src="/static/zefire-logo.png" alt="" /></div>
+      <div class="brand-mark brand-mark-small" aria-hidden="true">` + zephyrLogo + `</div>
       <div>
         <div class="eyebrow">Infrastructure Console</div>
         <h1>Zephyr</h1>
@@ -3606,13 +3583,13 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Zephyr · 部署文档</title>
-  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" type="image/svg+xml" href="` + faviconDataURI + `" />
   <style>{{template "styles"}}</style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand-lockup">
-      <div class="brand-mark brand-mark-small" aria-hidden="true"><img class="zefire-logo-img" src="/static/zefire-logo.png" alt="" /></div>
+      <div class="brand-mark brand-mark-small" aria-hidden="true">` + zephyrLogo + `</div>
       <div>
         <div class="eyebrow">Runbook</div>
         <h1>部署文档</h1>
@@ -3680,14 +3657,16 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 </html>
 {{define "styles"}}` + css + `{{end}}`))
 
-const zefireLogo = `
-<svg class="zefire-logo" viewBox="0 0 64 64" role="img" focusable="false" aria-hidden="true">
-  <circle class="zefire-logo-core" cx="32" cy="32" r="27" />
-  <path class="zefire-logo-wind" d="M18 20h26c2.8 0 4.8 2.2 4.3 4.7-.2 1.2-.9 2.2-1.8 3L25 45h26" />
-  <path class="zefire-logo-flare" d="M39.5 15.8 25.2 34h10.6l-5.2 14.2L45 29.4H34.2l5.3-13.6Z" />
-  <circle class="zefire-logo-node node-a" cx="18" cy="20" r="3.6" />
-  <circle class="zefire-logo-node node-b" cx="51" cy="45" r="3.6" />
-  <path class="zefire-logo-spark" d="M17 40c4.1 1.7 8.5 1.8 13.2.2" />
+const faviconDataURI = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='29' fill='%23202a2e'/%3E%3Cpath d='M18 20h26c3 0 5 2.3 4.3 4.8-.2 1.1-.9 2.1-1.8 2.9L25 45h26' fill='none' stroke='%23fff7ee' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M39.5 15.8 25.2 34h10.6l-5.2 14.2L45 29.4H34.2l5.3-13.6Z' fill='%23ef6b44'/%3E%3Ccircle cx='18' cy='20' r='4' fill='%2343b87f' stroke='%23fff7ee' stroke-width='2.4'/%3E%3Ccircle cx='51' cy='45' r='4' fill='%2343b87f' stroke='%23fff7ee' stroke-width='2.4'/%3E%3C/svg%3E`
+
+const zephyrLogo = `
+<svg class="zephyr-logo" viewBox="0 0 64 64" role="img" focusable="false" aria-hidden="true">
+  <circle class="zephyr-logo-core" cx="32" cy="32" r="27" />
+  <path class="zephyr-logo-wind" d="M18 20h26c2.8 0 4.8 2.2 4.3 4.7-.2 1.2-.9 2.2-1.8 3L25 45h26" />
+  <path class="zephyr-logo-flare" d="M39.5 15.8 25.2 34h10.6l-5.2 14.2L45 29.4H34.2l5.3-13.6Z" />
+  <circle class="zephyr-logo-node" cx="18" cy="20" r="3.6" />
+  <circle class="zephyr-logo-node" cx="51" cy="45" r="3.6" />
+  <path class="zephyr-logo-spark" d="M17 40c4.1 1.7 8.5 1.8 13.2.2" />
 </svg>`
 
 const css = `
@@ -3756,13 +3735,13 @@ button:disabled { opacity:.55; cursor:not-allowed; }
 .login-card { position:relative; z-index:1; width:min(420px,100%); padding:28px; background:rgba(255,250,245,.95); border:1px solid var(--line); border-radius:8px; box-shadow:0 28px 70px rgba(70,45,30,.12); }
 .brand-mark { width:58px; height:58px; display:grid; place-items:center; margin-bottom:14px; }
 .brand-mark-small { width:44px; height:44px; margin-bottom:0; flex:0 0 auto; }
-.zefire-logo { width:100%; height:100%; display:block; filter:drop-shadow(0 10px 22px rgba(70,45,30,.18)); }
-.zefire-logo-core { fill:#202a2e; }
-.zefire-logo-wind { fill:none; stroke:#fff7ee; stroke-width:5.8; stroke-linecap:round; stroke-linejoin:round; opacity:.96; }
-.zefire-logo-flare { fill:var(--accent); }
-.zefire-logo-node { fill:#43b87f; stroke:#fff7ee; stroke-width:2.6; }
-.zefire-logo-spark { fill:none; stroke:#43b87f; stroke-width:3.4; stroke-linecap:round; opacity:.9; }
-.brand-mark-small .zefire-logo { filter:drop-shadow(0 8px 16px rgba(70,45,30,.12)); }
+.zephyr-logo { width:100%; height:100%; display:block; filter:drop-shadow(0 10px 22px rgba(70,45,30,.18)); }
+.zephyr-logo-core { fill:#202a2e; }
+.zephyr-logo-wind { fill:none; stroke:#fff7ee; stroke-width:5.8; stroke-linecap:round; stroke-linejoin:round; opacity:.96; }
+.zephyr-logo-flare { fill:var(--accent); }
+.zephyr-logo-node { fill:#43b87f; stroke:#fff7ee; stroke-width:2.6; }
+.zephyr-logo-spark { fill:none; stroke:#43b87f; stroke-width:3.4; stroke-linecap:round; opacity:.9; }
+.brand-mark-small .zephyr-logo { filter:drop-shadow(0 8px 16px rgba(70,45,30,.12)); }
 label { display:block; margin:14px 0 8px; font-weight:800; }
 input, select { width:100%; height:42px; border:1px solid var(--line); border-radius:7px; padding:0 12px; background:#fff; color:var(--ink); }
 .inline-form { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; gap:10px; align-items:center; }

@@ -20,9 +20,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://127.0.0.1:8095",
-      "/logout": "http://127.0.0.1:8095",
-      "/static": "http://127.0.0.1:8095",
-      "/favicon.png": "http://127.0.0.1:8095"
+      "/logout": "http://127.0.0.1:8095"
     }
   }
 });

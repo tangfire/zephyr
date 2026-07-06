@@ -10,17 +10,6 @@ body {
   background: #f6f7f8;
 }
 
-body::before {
-  content: none;
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(236, 220, 207, 0.5) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(236, 220, 207, 0.5) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-
 .app-layout {
   position: relative;
   min-height: 100vh;
@@ -40,6 +29,18 @@ body::before {
   background: rgba(255, 255, 255, 0.92);
   border-bottom: 1px solid #e7eaee;
   backdrop-filter: blur(16px);
+}
+
+.header-actions {
+  width: auto !important;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.user-pill {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-main-layout {
@@ -74,19 +75,13 @@ body::before {
 }
 
 .header-logo {
-  width: 48px;
-  height: 38px;
-  object-fit: contain;
-  border-radius: 7px;
-  background: #fff6ee;
+  width: 42px;
+  height: 42px;
 }
 
 .drawer-logo {
-  width: 42px;
-  height: 34px;
-  object-fit: contain;
-  border-radius: 7px;
-  background: #fff6ee;
+  width: 40px;
+  height: 40px;
 }
 
 .mobile-nav-button {
@@ -95,9 +90,46 @@ body::before {
 
 .login-logo {
   display: block;
-  width: 132px;
-  height: auto;
+  width: 76px;
+  height: 76px;
   margin: 0 0 10px;
+}
+
+.zephyr-logo {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 10px 22px rgba(29, 37, 43, 0.14));
+}
+
+.zephyr-logo-core {
+  fill: #202a2e;
+}
+
+.zephyr-logo-wind {
+  fill: none;
+  stroke: #fff7ee;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 5.8;
+  opacity: 0.96;
+}
+
+.zephyr-logo-flare {
+  fill: #ef6b44;
+}
+
+.zephyr-logo-node {
+  fill: #43b87f;
+  stroke: #fff7ee;
+  stroke-width: 2.6;
+}
+
+.zephyr-logo-spark {
+  fill: none;
+  stroke: #43b87f;
+  stroke-linecap: round;
+  stroke-width: 3.4;
+  opacity: 0.9;
 }
 
 .eyebrow {
@@ -119,7 +151,7 @@ body::before {
   min-height: 100vh;
   place-items: center;
   padding: 20px;
-  background: linear-gradient(180deg, #fff7f1, #f4eee8);
+  background: linear-gradient(180deg, #f8fafc, #eef2f6);
 }
 
 .login-card {
@@ -132,32 +164,8 @@ body::before {
   margin-top: 22px;
 }
 
-.main-grid {
-  margin-top: 16px;
-}
-
 .side-stack {
   width: 100%;
-}
-
-.health-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 10px 12px;
-  color: #5e6367;
-  background: rgba(255, 250, 246, 0.78);
-  border: 1px solid #eadfd5;
-  border-radius: 8px;
-}
-
-.health-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  font-size: 13px;
 }
 
 .home-resource-card {
@@ -189,8 +197,8 @@ body::before {
   gap: 12px;
   min-width: 0;
   padding: 10px 12px;
-  background: #fffaf6;
-  border: 1px solid #eadfd5;
+  background: #f9fafb;
+  border: 1px solid #e7eaee;
   border-radius: 8px;
 }
 
@@ -212,8 +220,8 @@ body::before {
   min-height: 28px;
   padding: 4px 8px;
   color: #485056;
-  background: #f6efe8;
-  border: 1px solid #eadfd5;
+  background: #f2f4f7;
+  border: 1px solid #e4e8ec;
   border-radius: 999px;
   font-size: 12px;
   white-space: nowrap;
@@ -247,28 +255,6 @@ body::before {
   white-space: pre-wrap;
 }
 
-.table-section {
-  padding-bottom: 18px;
-  border-bottom: 1px solid #eadfd5;
-}
-
-.table-section + .table-section {
-  padding-top: 18px;
-}
-
-.table-section-last {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.table-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
 .overview-hero-card .ant-pro-card-body {
   padding: 18px 20px !important;
 }
@@ -295,6 +281,14 @@ body::before {
 .overview-version-list .ant-list-item,
 .overview-pipeline-list .ant-list-item {
   padding: 10px 0;
+}
+
+.page-head-card .ant-card-body {
+  padding: 16px 18px !important;
+}
+
+.page-head-card h4 {
+  margin: 0 !important;
 }
 
 .settings-tabs > .ant-tabs-nav {
@@ -355,8 +349,8 @@ body::before {
   justify-content: center;
   gap: 6px;
   padding: 12px 14px;
-  background: #fffaf6;
-  border: 1px solid #eadfd5;
+  background: #f9fafb;
+  border: 1px solid #e7eaee;
   border-radius: 8px;
 }
 
@@ -525,11 +519,8 @@ body::before {
 }
 
 .loading-logo {
-  width: 48px;
-  height: 38px;
-  object-fit: contain;
-  border-radius: 7px;
-  background: #fff6ee;
+  width: 42px;
+  height: 42px;
 }
 
 .loading-grid {
@@ -603,8 +594,12 @@ body::before {
     padding: 12px 14px;
   }
 
-  .app-header .ant-space {
-    width: 100%;
+  .app-header > .ant-space:first-child {
+    min-width: 0;
+  }
+
+  .header-actions {
+    width: auto !important;
   }
 
   .app-sidebar {
@@ -618,8 +613,8 @@ body::before {
   }
 
   .header-logo {
-    width: 42px;
-    height: 34px;
+    width: 38px;
+    height: 38px;
   }
 
   .mobile-nav-button {
@@ -645,12 +640,6 @@ body::before {
 
   .loading-grid {
     grid-template-columns: 1fr;
-  }
-
-  .table-section-head {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
   }
 
   .ant-table {

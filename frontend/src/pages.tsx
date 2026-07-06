@@ -30,6 +30,7 @@ import {
   FileText,
   GitBranch,
   Home,
+  Link2,
   Play,
   Plus,
   RefreshCw,
@@ -82,33 +83,14 @@ const riskColors: Record<Risk, string> = {
   link: "blue"
 };
 
-function HealthStrip({ health }: { health?: Record<string, unknown> }) {
-  const woodpecker = healthItem(health?.woodpecker);
-  const audit = healthItem(health?.audit);
-  const database = healthItem(health?.database);
-  const items = [
-    { label: "Woodpecker", ...woodpecker },
-    { label: "操作历史", ...audit },
-    { label: "账号模式", ...database }
-  ];
-  return (
-    <div className="health-strip">
-      {items.map((item) => (
-        <div className="health-item" key={item.label}>
-          <Tag color={healthTagColor(item.status)}>{item.label}</Tag>
-          <span>{item.message || "-"}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export function zephyrNavItems() {
   return [
     { key: "overview", icon: <Home size={16} />, label: "总览" },
     { key: "deploy", icon: <Rocket size={16} />, label: "部署" },
     { key: "pipelines", icon: <Activity size={16} />, label: "流水线" },
     { key: "monitoring", icon: <Server size={16} />, label: "监控" },
+    { key: "links", icon: <Link2 size={16} />, label: "入口" },
+    { key: "docs", icon: <FileText size={16} />, label: "文档" },
     { key: "settings", icon: <Settings size={16} />, label: "设置" }
   ];
 }
@@ -163,8 +145,8 @@ export function OverviewPage({
               {monitoring?.source && <Tag color={monitoringSourceColor(monitoring.source)}>{monitoringSourceText(monitoring.source)}</Tag>}
               {monitoring?.checked_at && <Text type="secondary">{checkedAtText(monitoring.checked_at, nowMs)}</Text>}
             </Space>
-            <Title level={3}>部署与资源状态</Title>
-            <Text type="secondary">先看水位、运行中任务和线上版本，再执行部署或回退。</Text>
+            <Title level={3}>运行总览</Title>
+            <Text type="secondary">线上版本、队列和资源水位集中在这里。</Text>
           </div>
           <Space wrap>
             {productDeploy && (
@@ -216,7 +198,6 @@ export function OverviewPage({
       </ProCard>
 
       <HomeResourceStrip summary={monitoring} loading={monitoringLoading} onOpenMonitoring={() => onNavigate("monitoring")} />
-      <HealthStrip health={state.health} />
     </Space>
   );
 }
@@ -301,14 +282,11 @@ export function DeployPage({
         title={
           <Space size={8}>
             <GitBranch size={16} />
-            <span>项目状态</span>
+            <span>部署矩阵</span>
           </Space>
         }
         extra={<Button icon={<RefreshCw size={16} />} loading={refreshing} onClick={onRefresh}>刷新</Button>}
       >
-        <div className="table-section-head">
-          <Text type="secondary">先确认线上版本、最近执行和上一成功版本，再执行部署或回退。</Text>
-        </div>
         <DeploymentStatusTable
           rows={rows}
           woodpecker={woodpecker}
@@ -323,7 +301,7 @@ export function DeployPage({
         title={
           <Space size={8}>
             <Play size={16} />
-            <span>更多固定动作</span>
+            <span>动作目录</span>
           </Space>
         }
       >
@@ -420,9 +398,7 @@ export function SettingsPage({
           label: "接入配置",
           children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
         },
-        { key: "infra", label: "基础设施入口", children: <InfrastructureLinks tasks={state.tasks || []} /> },
-        { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
-        { key: "docs", label: "部署文档", children: <Docs state={state} /> }
+        { key: "audit", label: "操作历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> }
       ]}
     />
   );
@@ -495,21 +471,21 @@ function TaskTable({
       )
     },
     {
-      title: "模块/执行仓库",
+      title: "归属",
       width: 220,
       render: (_, row) => (
         <Space direction="vertical" size={0}>
           <Text>{row.group || "默认模块"}</Text>
-          <Text type="secondary">{repoName(state, row)} · {row.branch || "main"}</Text>
+          <Text type="secondary">{repoName(state, row)}</Text>
         </Space>
       )
     },
     {
-      title: "执行上下文",
+      title: "默认",
       render: (_, row) => (
         <Space direction="vertical" size={0}>
           <Text>{row.branch || "main"}</Text>
-          <Text type="secondary">{pipelineTaskText(taskToPipelinePreview(state, row))}</Text>
+          {pipelineVariableHint(taskToPipelinePreview(state, row)) && <Text type="secondary">{pipelineVariableHint(taskToPipelinePreview(state, row))}</Text>}
           {row.confirm_text && <Text type="secondary">确认：{row.confirm_text}</Text>}
         </Space>
       )
@@ -626,7 +602,7 @@ function TaskFilters({
       <Col xs={24} md={6}>
         <Input
           allowClear
-          placeholder="搜索任务、变量、模块、仓库"
+          placeholder="搜索动作、变量、模块、仓库"
           value={value.q}
           onChange={(event) => update({ q: event.target.value })}
         />
@@ -1513,7 +1489,7 @@ function MonitoringContainerTable({ rows }: { rows: MonitoringContainer[] }) {
   );
 }
 
-function InfrastructureLinks({ tasks }: { tasks: Task[] }) {
+export function InfrastructureLinks({ tasks }: { tasks: Task[] }) {
   const links = tasks.filter((item) => item.external_url);
   const columns: ColumnsType<Task> = [
     {
@@ -1549,40 +1525,48 @@ function InfrastructureLinks({ tasks }: { tasks: Task[] }) {
   ];
 
   return (
-    <Card title="基础设施入口">
-      <Table
-        className="desktop-infra-table"
-        rowKey="id"
-        size="middle"
-        columns={columns}
-        dataSource={links}
-        pagination={false}
-        scroll={{ x: 820 }}
-      />
-      <List
-        className="mobile-infra-list"
-        dataSource={links}
-        renderItem={(row) => (
-          <List.Item
-            actions={[
-              <Button key="open" href={row.external_url} target="_blank" icon={<ExternalLink size={14} />}>
-                打开
-              </Button>
-            ]}
-          >
-            <List.Item.Meta
-              title={<Text strong>{row.title.replace(/^打开\s*/, "")}</Text>}
-              description={
-                <Space direction="vertical" size={4}>
-                  <Text type="secondary">{row.description}</Text>
-                  <Text copyable>{row.external_url}</Text>
-                </Space>
-              }
-            />
-          </List.Item>
-        )}
-      />
-    </Card>
+    <Space direction="vertical" size={16} className="side-stack">
+      <Card className="page-head-card">
+        <Space direction="vertical" size={4}>
+          <Title level={4}>基础设施入口</Title>
+          <Text type="secondary">Woodpecker、监控、日志和外部控制台集中在这里。</Text>
+        </Space>
+      </Card>
+      <Card>
+        <Table
+          className="desktop-infra-table"
+          rowKey="id"
+          size="middle"
+          columns={columns}
+          dataSource={links}
+          pagination={false}
+          scroll={{ x: 820 }}
+        />
+        <List
+          className="mobile-infra-list"
+          dataSource={links}
+          renderItem={(row) => (
+            <List.Item
+              actions={[
+                <Button key="open" href={row.external_url} target="_blank" icon={<ExternalLink size={14} />}>
+                  打开
+                </Button>
+              ]}
+            >
+              <List.Item.Meta
+                title={<Text strong>{row.title.replace(/^打开\s*/, "")}</Text>}
+                description={
+                  <Space direction="vertical" size={4}>
+                    <Text type="secondary">{row.description}</Text>
+                    <Text copyable>{row.external_url}</Text>
+                  </Space>
+                }
+              />
+            </List.Item>
+          )}
+        />
+      </Card>
+    </Space>
   );
 }
 
@@ -2780,22 +2764,6 @@ function mobileDeploymentActions(
     );
   }
   return out;
-}
-
-function healthItem(value: unknown): { status: string; message: string } {
-  if (!value || typeof value !== "object") return { status: "unknown", message: "-" };
-  const row = value as Record<string, unknown>;
-  return {
-    status: String(row.status || "unknown"),
-    message: String(row.message || row.error || "-")
-  };
-}
-
-function healthTagColor(status: string): string {
-  if (status === "ok") return "success";
-  if (status === "warning") return "gold";
-  if (status === "degraded" || status === "error") return "error";
-  return "default";
 }
 
 function monitoringSourceText(source: string): string {

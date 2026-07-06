@@ -18,9 +18,10 @@ import {
   Typography,
   theme
 } from "antd";
-import { FileText, LogOut, Menu as MenuIcon } from "lucide-react";
+import { LogOut, Menu as MenuIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText } from "./api";
+import { ZephyrLogo } from "./Logo";
 import type {
   AuditRecord,
   DeploymentStatus,
@@ -42,6 +43,7 @@ import {
   PipelinePage,
   PipelineSummaryDrawer,
   SettingsPage,
+  InfrastructureLinks,
   TaskRunContext,
   branchOptionsForRepo,
   branchOptionsForTask,
@@ -71,7 +73,7 @@ export function App() {
         components: {
           Card: { borderRadiusLG: 8 },
           Button: { borderRadius: 7 },
-          Table: { headerBg: "#fff5ed" }
+          Table: { headerBg: "#f7f9fb" }
         }
       }}
     >
@@ -110,7 +112,7 @@ function LoginPage() {
   return (
     <main className="login-page">
       <Card className="login-card">
-        <img className="login-logo" src="/static/zefire-logo.png" alt="Zephyr" />
+        <ZephyrLogo className="login-logo" title="Zephyr" />
         <Title level={2}>Zephyr</Title>
         <Text type="secondary">基础设施部署控制台</Text>
         <Form layout="vertical" onFinish={submit} className="login-form">
@@ -503,6 +505,10 @@ function Shell({ page }: { page: "home" | "docs" }) {
             onRun={openRunTask}
           />
         );
+      case "links":
+        return <InfrastructureLinks tasks={state.tasks || []} />;
+      case "docs":
+        return <Docs state={state} />;
       case "settings":
         return (
           <SettingsPage
@@ -547,7 +553,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
       <Header className="app-header">
         <Space size={12}>
           <Button className="mobile-nav-button" icon={<MenuIcon size={18} />} onClick={() => setMobileNavOpen(true)} />
-          <img className="header-logo" src="/static/zefire-logo.png" alt="Zephyr" />
+          <ZephyrLogo className="header-logo" title="Zephyr" />
           <div>
             <Text className="eyebrow">Infrastructure Console</Text>
             <Title level={4} className="header-title">
@@ -555,11 +561,8 @@ function Shell({ page }: { page: "home" | "docs" }) {
             </Title>
           </div>
         </Space>
-        <Space wrap>
-          <Button type="link" href="/docs" icon={<FileText size={16} />}>
-            部署文档
-          </Button>
-          <Tag>{state.current_user.display_name || state.current_user.username}</Tag>
+        <Space className="header-actions" size={10}>
+          <Tag className="user-pill">{state.current_user.display_name || state.current_user.username}</Tag>
           <Button icon={<LogOut size={16} />} onClick={logout}>
             退出
           </Button>
@@ -589,7 +592,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
         onClose={() => setMobileNavOpen(false)}
         title={
           <Space size={10}>
-            <img className="drawer-logo" src="/static/zefire-logo.png" alt="Zephyr" />
+            <ZephyrLogo className="drawer-logo" title="Zephyr" />
             <Text strong>Zephyr</Text>
           </Space>
         }
@@ -747,7 +750,7 @@ function LoadingShell() {
       <Content className="loading-shell">
         <div className="loading-panel">
           <Space size={12}>
-            <img className="loading-logo" src="/static/zefire-logo.png" alt="Zephyr" />
+            <ZephyrLogo className="loading-logo" title="Zephyr" />
             <div>
               <Text className="eyebrow">Infrastructure Console</Text>
               <Title level={4} className="header-title">
