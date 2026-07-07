@@ -97,6 +97,12 @@ function Router() {
   return <Shell page={path === "/docs" ? "docs" : "home"} />;
 }
 
+function pageFromHash(): string {
+  const value = window.location.hash.replace(/^#\/?/, "").trim();
+  const allowed = new Set(["overview", "deploy", "pipelines", "monitoring", "logs", "settings", "links", "docs"]);
+  return allowed.has(value) ? value : "overview";
+}
+
 function LoginPage() {
   const { message } = AntApp.useApp();
   const [loading, setLoading] = useState(false);
@@ -152,7 +158,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
   const taskFormBranch = Form.useWatch("branch", taskForm);
   const [customConfig, setCustomConfig] = useState<TaskConfig | null>(null);
   const [triggeringTaskIds, setTriggeringTaskIds] = useState<string[]>([]);
-  const [activePage, setActivePage] = useState("overview");
+  const [activePage, setActivePage] = useState(() => pageFromHash());
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [auditRecords, setAuditRecords] = useState<AuditRecord[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
@@ -229,6 +235,18 @@ function Shell({ page }: { page: "home" | "docs" }) {
     loadMonitoring();
     const timer = window.setInterval(loadState, 12000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    function syncHashPage() {
+      setActivePage(pageFromHash());
+    }
+    window.addEventListener("hashchange", syncHashPage);
+    window.addEventListener("popstate", syncHashPage);
+    return () => {
+      window.removeEventListener("hashchange", syncHashPage);
+      window.removeEventListener("popstate", syncHashPage);
+    };
   }, []);
 
   useEffect(() => {
@@ -487,6 +505,10 @@ function Shell({ page }: { page: "home" | "docs" }) {
 
   function navigate(key: string) {
     setActivePage(key);
+    const nextHash = key === "overview" ? "" : `#/${key}`;
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(null, "", `${window.location.pathname}${nextHash}`);
+    }
     setMobileNavOpen(false);
   }
 

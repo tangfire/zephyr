@@ -306,22 +306,7 @@ func (a *App) listDozzleContainers(ctx context.Context) ([]LogContainer, error) 
 	if err := json.Unmarshal([]byte(text), &rows); err != nil {
 		return nil, fmt.Errorf("Dozzle list_containers 返回无法解析")
 	}
-	containers := make([]LogContainer, 0, len(rows))
-	for _, row := range rows {
-		host := strings.TrimSpace(row.Host)
-		containers = append(containers, LogContainer{
-			ID:       strings.TrimSpace(row.ID),
-			Name:     strings.TrimPrefix(strings.TrimSpace(row.Name), "/"),
-			Image:    strings.TrimSpace(row.Image),
-			State:    strings.TrimSpace(row.State),
-			Health:   strings.TrimSpace(row.Health),
-			Host:     host,
-			HostName: host,
-			Group:    strings.TrimSpace(row.Group),
-			Created:  strings.TrimSpace(row.Created),
-			Source:   "dozzle_mcp",
-		})
-	}
+	containers := a.dozzleRawContainersToLogContainers(rows)
 	sortLogContainers(containers)
 	return containers, nil
 }
@@ -423,9 +408,20 @@ func (a *App) listDozzleContainersWithClient(ctx context.Context, client *dozzle
 	if err := json.Unmarshal([]byte(text), &rows); err != nil {
 		return nil, fmt.Errorf("Dozzle list_containers 返回无法解析")
 	}
+	out := a.dozzleRawContainersToLogContainers(rows)
+	sortLogContainers(out)
+	return out, nil
+}
+
+func (a *App) dozzleRawContainersToLogContainers(rows []dozzleContainerRaw) []LogContainer {
+	hostNames := a.logHostDisplayNames(rows)
 	out := make([]LogContainer, 0, len(rows))
 	for _, row := range rows {
 		host := strings.TrimSpace(row.Host)
+		hostName := hostNames[host]
+		if hostName == "" {
+			hostName = host
+		}
 		out = append(out, LogContainer{
 			ID:       strings.TrimSpace(row.ID),
 			Name:     strings.TrimPrefix(strings.TrimSpace(row.Name), "/"),
@@ -433,14 +429,73 @@ func (a *App) listDozzleContainersWithClient(ctx context.Context, client *dozzle
 			State:    strings.TrimSpace(row.State),
 			Health:   strings.TrimSpace(row.Health),
 			Host:     host,
-			HostName: host,
+			HostName: hostName,
 			Group:    strings.TrimSpace(row.Group),
 			Created:  strings.TrimSpace(row.Created),
 			Source:   "dozzle_mcp",
 		})
 	}
-	sortLogContainers(out)
-	return out, nil
+	return out
+}
+
+func (a *App) logHostDisplayNames(rows []dozzleContainerRaw) map[string]string {
+	hosts := []string{}
+	seen := map[string]bool{}
+	for _, row := range rows {
+		host := strings.TrimSpace(row.Host)
+		if host == "" || seen[host] {
+			continue
+		}
+		seen[host] = true
+		hosts = append(hosts, host)
+	}
+	configs := parseMonitorHosts(a.cfg)
+	aliases := map[string]string{}
+	for _, cfg := range configs {
+		display := strings.TrimSpace(firstNonEmpty(cfg.Name, cfg.ID))
+		if display == "" {
+			continue
+		}
+		for _, alias := range append([]string{cfg.ID, cfg.Name, cfg.SSHHost, cfg.Address}, cfg.BeszelNames...) {
+			alias = strings.TrimSpace(alias)
+			if alias != "" {
+				aliases[strings.ToLower(alias)] = display
+			}
+		}
+	}
+	names := map[string]string{}
+	for _, host := range hosts {
+		if display := aliases[strings.ToLower(host)]; display != "" {
+			names[host] = display
+			continue
+		}
+		if len(hosts) == 1 && len(configs) == 1 {
+			names[host] = strings.TrimSpace(firstNonEmpty(configs[0].Name, configs[0].ID, "运维机"))
+			continue
+		}
+		if isLikelyOpaqueHostID(host) {
+			names[host] = shortLogHostID(host)
+			continue
+		}
+		names[host] = host
+	}
+	return names
+}
+
+func isLikelyOpaqueHostID(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) >= 32 && strings.Count(value, "-") >= 4 {
+		return true
+	}
+	return false
+}
+
+func shortLogHostID(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) <= 8 {
+		return value
+	}
+	return "主机 " + value[:8]
 }
 
 func selectLogContainers(containers []LogContainer, input LogQueryRequest) []LogContainer {

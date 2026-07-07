@@ -39,6 +39,24 @@ func TestMCPJSONPayloadParsesSSE(t *testing.T) {
 	}
 }
 
+func TestDozzleHostUUIDUsesConfiguredDisplayName(t *testing.T) {
+	app := &App{cfg: Config{
+		MonitorHostsJSON: `[{"id":"ops","name":"运维机","beszel_names":["ops"]}]`,
+	}}
+	containers := app.dozzleRawContainersToLogContainers([]dozzleContainerRaw{
+		{ID: "abc", Name: "/peapod", Host: "c6c100c7-2f10-4ba7-97d0-d800f76f882f", State: "running"},
+	})
+	if len(containers) != 1 {
+		t.Fatalf("expected one container, got %d", len(containers))
+	}
+	if containers[0].HostName != "运维机" {
+		t.Fatalf("expected configured display name, got %q", containers[0].HostName)
+	}
+	if containers[0].Host == containers[0].HostName {
+		t.Fatalf("raw host id should remain separate from display name")
+	}
+}
+
 func TestDozzleMCPClientCallToolText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/mcp" {

@@ -3,10 +3,12 @@ import {
   App as AntApp,
   Button,
   Card,
+  Checkbox,
   Col,
   Descriptions,
   Dropdown,
   Drawer,
+  Empty,
   Form,
   Grid,
   Input,
@@ -15,6 +17,7 @@ import {
   Popconfirm,
   Progress,
   Row,
+  Segmented,
   Select,
   Space,
   Table,
@@ -26,6 +29,7 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { ProCard, ProTable } from "@ant-design/pro-components";
 import type { ProColumns } from "@ant-design/pro-components";
+import { Virtuoso } from "react-virtuoso";
 import {
   Activity,
   Clock3,
@@ -1679,11 +1683,14 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
   const [summary, setSummary] = useState<LogSummaryResponse | null>(null);
   const [containers, setContainers] = useState<LogContainer[]>([]);
   const [result, setResult] = useState<LogQueryResponse | null>(null);
+  const [containerSearch, setContainerSearch] = useState("");
+  const [activeLine, setActiveLine] = useState<LogLine | null>(null);
   const [loading, setLoading] = useState(false);
   const [queryLoading, setQueryLoading] = useState(false);
-  const selectedHosts = Form.useWatch("hosts", form) || [];
+  const selectedContainers = Form.useWatch("containers", form) || [];
+  const keyword = Form.useWatch("keyword", form) || "";
 
-  async function loadLogsConfig(options: { notify?: boolean } = {}) {
+  async function loadLogsConfig(options: { notify?: boolean; autoQuery?: boolean } = {}) {
     setLoading(true);
     try {
       const [summaryData, containersData] = await Promise.all([
@@ -1693,7 +1700,7 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
       setSummary(summaryData);
       setContainers(containersData.containers || []);
       const currentContainers = form.getFieldValue("containers") || [];
-      form.setFieldsValue({
+      const nextValues = {
         since_minutes: Number(form.getFieldValue("since_minutes") || 15),
         tail: Number(form.getFieldValue("tail") || 200),
         level: form.getFieldValue("level") || "all",
@@ -1701,8 +1708,10 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
         hosts: form.getFieldValue("hosts") || [],
         containers: currentContainers.length ? currentContainers : defaultLogContainerValues(containersData.containers || []),
         keyword: form.getFieldValue("keyword") || ""
-      });
+      };
+      form.setFieldsValue(nextValues);
       if (options.notify) message.success("日志配置已刷新");
+      if (options.autoQuery) await runQuery(nextValues);
     } catch (error) {
       message.error(errorText(error) || "日志配置加载失败");
     } finally {
@@ -1740,31 +1749,54 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
   }
 
   useEffect(() => {
-    loadLogsConfig();
+    loadLogsConfig({ autoQuery: true });
   }, []);
 
-  const hostOptions = logHostOptions(containers);
-  const filteredContainers = containers.filter((item) => {
-    const hosts = selectedHosts as string[];
-    return !hosts.length || hosts.includes(item.host) || hosts.includes(item.host_name || "");
-  });
-  const containerOptions = filteredContainers.map((item) => ({
-    value: logContainerValue(item),
-    label: logContainerLabel(item)
-  }));
+  function toggleContainer(value: string) {
+    const current = new Set((form.getFieldValue("containers") || []) as string[]);
+    if (current.has(value)) {
+      current.delete(value);
+    } else {
+      if (current.size >= (summary?.limits?.max_containers || 10)) {
+        message.warning(`最多同时查询 ${summary?.limits?.max_containers || 10} 个容器`);
+        return;
+      }
+      current.add(value);
+    }
+    form.setFieldsValue({ containers: Array.from(current) });
+  }
+
+  function selectHostContainers(host: string) {
+    const hostContainers = containers.filter((item) => item.host === host).slice(0, summary?.limits?.max_containers || 10).map(logContainerValue);
+    form.setFieldsValue({ containers: hostContainers });
+  }
+
+  function clearContainers() {
+    form.setFieldsValue({ containers: [] });
+  }
+
   const lines = result?.lines || [];
   const activeSource = result?.source || summary?.source || "degraded";
   const degradedReason = result?.degraded_reason || summary?.degraded_reason || "";
+  const selectedSet = new Set((selectedContainers as string[]).map(String));
+  const selectedLogContainers = containers.filter((item) => selectedSet.has(logContainerValue(item)));
+  const filteredContainers = filterLogContainers(containers, containerSearch);
+  const groupedContainers = groupLogContainers(filteredContainers);
+  const healthyContainers = containers.filter((item) => /(running|up|healthy)/i.test(`${item.state || ""} ${item.health || ""}`)).length;
+  const errorLines = lines.filter((line) => inferLogLevel(line).includes("error") || inferLogLevel(line).includes("fatal") || inferLogLevel(line).includes("panic")).length;
+  const warnLines = lines.filter((line) => inferLogLevel(line).includes("warn")).length;
+  const querySourceText = logSourceText(activeSource);
+  const isMobile = !screens.lg;
 
   return (
     <Space direction="vertical" size={16} className="side-stack">
       <PageIntro
-        title="日志"
-        description="轻量模式读取 Dozzle 暴露的 Docker 已保留日志；需要长期历史检索时再切换 Grafana/Loki。"
+        title="日志工作台"
+        description="在 Peapod 里聚合 Docker 已保留日志、快速筛选容器和错误；长期历史和告警仍交给 Grafana/Loki。"
         stats={[
-          { label: "模式", value: summary?.label || "加载中", tone: summary?.mode === "observability" ? "normal" : "success" },
-          { label: "数据源", value: logSourceText(activeSource), tone: activeSource === "dozzle_mcp" ? "success" : activeSource === "ssh_fallback" ? "warning" : "danger" },
-          { label: "容器", value: `${summary?.container_count ?? containers.length}`, tone: containers.length ? "normal" : "warning" },
+          { label: "策略", value: shortLogStrategyLabel(summary), tone: summary?.mode === "observability" ? "normal" : "success" },
+          { label: "查询源", value: querySourceText, tone: activeSource === "dozzle_mcp" ? "success" : activeSource === "ssh_fallback" ? "warning" : "danger" },
+          { label: "容器", value: `${healthyContainers}/${summary?.container_count ?? containers.length}`, tone: healthyContainers ? "normal" : "warning" },
           { label: "保留", value: summary?.docker_retention || "20m × 3", tone: "normal" }
         ]}
         actions={
@@ -1780,123 +1812,222 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
 
       {degradedReason && <Alert type="warning" showIcon message="日志能力已降级" description={degradedReason} />}
 
-      <ProCard className="log-query-card" title="筛选">
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={runQuery}
-          initialValues={{ since_minutes: 15, tail: 200, level: "all", stream: "all", hosts: [], containers: [], keyword: "" }}
-        >
-          <Row gutter={[12, 6]}>
-            <Col xs={24} lg={6}>
-              <Form.Item label="主机" name="hosts">
-                <Select mode="multiple" allowClear options={hostOptions} placeholder="全部主机" maxTagCount="responsive" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} lg={8}>
-              <Form.Item label="容器" name="containers">
-                <Select
-                  mode="multiple"
-                  allowClear
-                  showSearch
-                  optionFilterProp="label"
-                  options={containerOptions}
-                  placeholder="默认选取运行中的核心容器"
-                  maxTagCount="responsive"
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={12} lg={3}>
-              <Form.Item label="时间" name="since_minutes">
-                <Select
-                  options={[
-                    { value: 5, label: "5 分钟" },
-                    { value: 15, label: "15 分钟" },
-                    { value: 60, label: "1 小时" },
-                    { value: 360, label: "6 小时" },
-                    { value: 1440, label: "24 小时" }
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={12} lg={3}>
-              <Form.Item label="尾部行数" name="tail">
-                <InputNumber min={20} max={summary?.limits?.max_lines || 1000} style={{ width: "100%" }} />
-              </Form.Item>
-            </Col>
-            <Col xs={12} lg={2}>
-              <Form.Item label="级别" name="level">
-                <Select
-                  options={[
-                    { value: "all", label: "全部" },
-                    { value: "error", label: "Error" },
-                    { value: "warn", label: "Warn" },
-                    { value: "info", label: "Info" },
-                    { value: "debug", label: "Debug" }
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={12} lg={2}>
-              <Form.Item label="输出流" name="stream">
-                <Select options={[{ value: "all", label: "全部" }, { value: "stdout", label: "stdout" }, { value: "stderr", label: "stderr" }]} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} lg={18}>
-              <Form.Item label="关键词" name="keyword">
-                <Input allowClear prefix={<Search size={15} />} placeholder="按错误、接口、任务 ID、容器名搜索" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} lg={6}>
-              <Form.Item label={screens.lg ? " " : "操作"}>
-                <Space className="log-query-actions" wrap>
-                  <Button type="primary" htmlType="submit" loading={queryLoading} icon={<Search size={15} />}>
-                    查询日志
-                  </Button>
-                  <Button icon={<Copy size={15} />} onClick={copyVisibleLogs}>
-                    复制结果
-                  </Button>
-                </Space>
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
-      </ProCard>
-
-      <ProCard
-        className="log-view-card"
-        title={
-          <Space size={8}>
-            <FileText size={16} />
-            <span>聚合日志</span>
-            <Tag color={logSourceColor(activeSource)}>{logSourceText(activeSource)}</Tag>
-          </Space>
-        }
-        extra={<Text type="secondary">{result?.checked_at ? checkedAtText(result.checked_at, nowMs) : `${containers.length} 个容器可选`}</Text>}
-        loading={queryLoading}
-      >
-        {lines.length ? (
-          <div className="log-viewer">
-            {lines.map((line, index) => (
-              <div className="log-line" key={`${line.host}-${line.container_id}-${line.timestamp || index}-${index}`}>
-                <span className="log-line-time">{logLineTime(line.timestamp)}</span>
-                <Tag className="log-line-container">{line.host_name || line.host}/{line.container_name}</Tag>
-                {line.level && <Tag color={logLevelColor(line.level)}>{line.level}</Tag>}
-                {line.stream && <Tag color="default">{line.stream}</Tag>}
-                <span className="log-line-message">{line.message}</span>
+      <Row gutter={[16, 16]} className="log-workspace">
+        <Col xs={24} lg={7} xl={6}>
+          <ProCard
+            className="log-source-card"
+            title={<Space size={8}><Server size={16} />服务</Space>}
+            extra={<Button type="link" size="small" onClick={clearContainers}>清空</Button>}
+            loading={loading}
+          >
+            <Input
+              allowClear
+              prefix={<Search size={14} />}
+              placeholder="搜索容器、镜像、主机"
+              value={containerSearch}
+              onChange={(event) => setContainerSearch(event.target.value)}
+            />
+            <div className="log-source-summary">
+              <Text type="secondary">已选 {selectedSet.size} 个，最多 {summary?.limits?.max_containers || 10} 个</Text>
+              {selectedLogContainers.length > 0 && (
+                <Button size="small" onClick={() => runQuery(form.getFieldsValue())} loading={queryLoading}>
+                  查询所选
+                </Button>
+              )}
+            </div>
+            <div className="log-source-list">
+              {groupedContainers.length ? groupedContainers.map((group) => (
+                <div className="log-source-host" key={group.host}>
+                  <div className="log-source-host-head">
+                    <Space size={6}>
+                      <Server size={14} />
+                      <Text strong>{group.hostName}</Text>
+                      <Tag>{group.items.length}</Tag>
+                    </Space>
+                    <Button size="small" type="link" onClick={() => selectHostContainers(group.host)}>
+                      选主机
+                    </Button>
+                  </div>
+                  <div className="log-source-items">
+                    {group.items.map((item) => {
+                      const value = logContainerValue(item);
+                      const checked = selectedSet.has(value);
+                      return (
+                        <button
+                          type="button"
+                          className={`log-source-item ${checked ? "log-source-item-active" : ""}`}
+                          key={value}
+                          onClick={() => toggleContainer(value)}
+                        >
+                          <Checkbox checked={checked} onChange={() => toggleContainer(value)} onClick={(event) => event.stopPropagation()} />
+                          <span className={`system-dot system-dot-${logContainerTone(item)}`} />
+                          <span className="log-source-item-main">
+                            <Text strong ellipsis>{item.name}</Text>
+                            <Text type="secondary" ellipsis>{logContainerMeta(item)}</Text>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )) : (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的容器" />
+              )}
+            </div>
+          </ProCard>
+        </Col>
+        <Col xs={24} lg={17} xl={18}>
+          <ProCard
+            className="log-console-card"
+            title={
+              <Space size={8}>
+                <FileText size={16} />
+                <span>聚合日志</span>
+                <Tag color={logSourceColor(activeSource)}>{querySourceText}</Tag>
+              </Space>
+            }
+            extra={<Text type="secondary">{result?.checked_at ? checkedAtText(result.checked_at, nowMs) : `${containers.length} 个容器可选`}</Text>}
+          >
+            <Form
+              form={form}
+              layout="vertical"
+              className="log-explore-form"
+              onFinish={runQuery}
+              initialValues={{ since_minutes: 15, tail: 200, level: "all", stream: "all", hosts: [], containers: [], keyword: "" }}
+            >
+              <Form.Item name="containers" hidden><Select mode="multiple" /></Form.Item>
+              <Form.Item name="hosts" hidden><Select mode="multiple" /></Form.Item>
+              <div className="log-explore-toolbar">
+                <Form.Item name="keyword" className="log-search-field">
+                  <Input allowClear size="large" prefix={<Search size={16} />} placeholder="搜索错误、接口、任务 ID、容器名" />
+                </Form.Item>
+                <Form.Item name="since_minutes" className="log-small-field">
+                  <Select
+                    size="large"
+                    options={[
+                      { value: 5, label: "5m" },
+                      { value: 15, label: "15m" },
+                      { value: 60, label: "1h" },
+                      { value: 360, label: "6h" },
+                      { value: 1440, label: "24h" }
+                    ]}
+                  />
+                </Form.Item>
+                <Button type="primary" size="large" htmlType="submit" loading={queryLoading} icon={<Search size={16} />}>
+                  查询
+                </Button>
               </div>
-            ))}
-          </div>
-        ) : (
-          <Alert
-            type="info"
-            showIcon
-            message="还没有查询结果"
-            description="选择容器后点击查询。轻量日志只读取 Docker 当前仍保留的内容，不替代长期日志库。"
-          />
+              <div className="log-filter-row">
+                <Form.Item name="level" label="级别">
+                  <Segmented
+                    size={isMobile ? "small" : "middle"}
+                    options={[
+                      { value: "all", label: "全部" },
+                      { value: "error", label: "Error" },
+                      { value: "warn", label: "Warn" },
+                      { value: "info", label: "Info" },
+                      { value: "debug", label: "Debug" }
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item name="stream" label="流">
+                  <Select
+                    options={[
+                      { value: "all", label: "全部" },
+                      { value: "stdout", label: "stdout" },
+                      { value: "stderr", label: "stderr" }
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item name="tail" label="行数">
+                  <InputNumber min={20} max={summary?.limits?.max_lines || 1000} />
+                </Form.Item>
+                <Space className="log-action-row" wrap>
+                  <Button icon={<Copy size={15} />} onClick={copyVisibleLogs}>
+                    复制
+                  </Button>
+                  {summary?.dozzle_public_url && <Button href={summary.dozzle_public_url} target="_blank" icon={<ExternalLink size={15} />}>Dozzle</Button>}
+                </Space>
+              </div>
+            </Form>
+
+            <div className="log-result-meta">
+              <Space wrap size={[8, 8]}>
+                <Tag color={lines.length ? "blue" : "default"}>{lines.length} 行</Tag>
+                {errorLines > 0 && <Tag color="red">{errorLines} error</Tag>}
+                {warnLines > 0 && <Tag color="gold">{warnLines} warn</Tag>}
+                {selectedLogContainers.slice(0, 5).map((item) => <Tag key={logContainerValue(item)}>{item.name}</Tag>)}
+                {selectedLogContainers.length > 5 && <Tag>+{selectedLogContainers.length - 5}</Tag>}
+              </Space>
+              <Text type="secondary">最多返回 {summary?.limits?.max_lines || 1000} 行，日志内容已脱敏</Text>
+            </div>
+
+            {lines.length ? (
+              <div className="log-console">
+                <Virtuoso
+                  className="log-virtual-list"
+                  data={lines}
+                  style={{ height: isMobile ? 520 : 640 }}
+                  itemContent={(index, line) => (
+                    <LogRow
+                      line={line}
+                      keyword={keyword}
+                      index={index}
+                      onOpen={() => setActiveLine(line)}
+                    />
+                  )}
+                />
+              </div>
+            ) : (
+              <div className="log-empty-state">
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description={result ? "没有匹配的日志" : "选择服务后查询日志"}
+                />
+                <Text type="secondary">轻量日志只读取 Docker 当前保留内容，不替代长期日志库。</Text>
+              </div>
+            )}
+          </ProCard>
+        </Col>
+      </Row>
+
+      <Drawer
+        title="日志详情"
+        width={screens.lg ? 640 : "100vw"}
+        open={!!activeLine}
+        onClose={() => setActiveLine(null)}
+        destroyOnClose
+      >
+        {activeLine && (
+          <Space direction="vertical" size={14} className="side-stack">
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="时间">{activeLine.timestamp || "-"}</Descriptions.Item>
+              <Descriptions.Item label="主机">{friendlyLogHostName(activeLine.host_name || activeLine.host)}</Descriptions.Item>
+              <Descriptions.Item label="容器">{activeLine.container_name}</Descriptions.Item>
+              <Descriptions.Item label="级别">{inferLogLevel(activeLine) || "-"}</Descriptions.Item>
+              <Descriptions.Item label="输出流">{activeLine.stream || "-"}</Descriptions.Item>
+            </Descriptions>
+            <pre className="log-detail-message">{activeLine.message}</pre>
+          </Space>
         )}
-      </ProCard>
+      </Drawer>
     </Space>
+  );
+}
+
+function LogRow({ line, keyword, index, onOpen }: { line: LogLine; keyword: string; index: number; onOpen: () => void }) {
+  const level = inferLogLevel(line);
+  const container = line.container_name || line.container_id || "-";
+  return (
+    <button type="button" className="log-row" onClick={onOpen}>
+      <span className="log-row-index">{index + 1}</span>
+      <span className="log-row-time">{logLineTime(line.timestamp)}</span>
+      <span className={`log-row-level log-row-level-${logLevelTone(level)}`}>{level || "log"}</span>
+      <span className="log-row-source" title={`${friendlyLogHostName(line.host_name || line.host)}/${container}`}>
+        {container}
+      </span>
+      <span className="log-row-message">{renderHighlightedLogMessage(line.message, keyword)}</span>
+    </button>
   );
 }
 
@@ -3456,12 +3587,12 @@ function logContainerValue(item: LogContainer): string {
 
 function logContainerLabel(item: LogContainer): string {
   const state = item.state ? ` · ${item.state}` : "";
-  return `${item.host_name || item.host}/${item.name}${state}`;
+  return `${friendlyLogHostName(item.host_name || item.host)}/${item.name}${state}`;
 }
 
 function defaultLogContainerValues(containers: LogContainer[]): string[] {
   const preferred = containers.filter((item) => {
-    const name = `${item.host}/${item.name}`.toLowerCase();
+    const name = `${item.host}/${item.host_name}/${item.name}`.toLowerCase();
     const running = ["running", "up"].some((state) => String(item.state || "").toLowerCase().includes(state));
     return running && /(peapod|woodpecker|api|server|worker|mysql|redis)/.test(name);
   });
@@ -3473,9 +3604,88 @@ function logHostOptions(containers: LogContainer[]): { value: string; label: str
   const rows = new Map<string, string>();
   for (const item of containers) {
     if (!item.host) continue;
-    rows.set(item.host, item.host_name || item.host);
+    rows.set(item.host, friendlyLogHostName(item.host_name || item.host));
   }
   return Array.from(rows.entries()).map(([value, label]) => ({ value, label }));
+}
+
+function filterLogContainers(containers: LogContainer[], keyword: string): LogContainer[] {
+  const query = keyword.trim().toLowerCase();
+  if (!query) return containers;
+  return containers.filter((item) => {
+    const haystack = [
+      item.name,
+      item.image,
+      item.state,
+      item.health,
+      item.group,
+      item.host,
+      item.host_name
+    ].filter(Boolean).join(" ").toLowerCase();
+    return haystack.includes(query);
+  });
+}
+
+function groupLogContainers(containers: LogContainer[]): Array<{ host: string; hostName: string; items: LogContainer[] }> {
+  const rows = new Map<string, { host: string; hostName: string; items: LogContainer[] }>();
+  for (const item of containers) {
+    const key = item.host || item.host_name || "default";
+    if (!rows.has(key)) {
+      rows.set(key, { host: item.host, hostName: friendlyLogHostName(item.host_name || item.host || "本机"), items: [] });
+    }
+    rows.get(key)!.items.push(item);
+  }
+  return Array.from(rows.values()).map((group) => ({
+    ...group,
+    items: [...group.items].sort((left, right) => logContainerSortWeight(left) - logContainerSortWeight(right) || left.name.localeCompare(right.name))
+  }));
+}
+
+function logContainerSortWeight(item: LogContainer): number {
+  const name = item.name.toLowerCase();
+  if (/peapod|woodpecker|api|server|worker/.test(name)) return 0;
+  if (/mysql|redis|postgres/.test(name)) return 1;
+  if (/beszel|dozzle|grafana|loki|prometheus/.test(name)) return 2;
+  return 3;
+}
+
+function logContainerTone(item: LogContainer): "normal" | "warning" | "danger" {
+  const state = `${item.state || ""} ${item.health || ""}`.toLowerCase();
+  if (/exited|dead|unhealthy|error|fail/.test(state)) return "danger";
+  if (/created|paused|restarting|configured/.test(state)) return "warning";
+  return "normal";
+}
+
+function logContainerMeta(item: LogContainer): string {
+  const state = [item.state, item.health].filter(Boolean).join(" / ");
+  const image = shortImageName(item.image || "");
+  return [state, image].filter(Boolean).join(" · ") || item.source;
+}
+
+function shortImageName(value: string): string {
+  if (!value) return "";
+  const withoutDigest = value.split("@")[0];
+  const parts = withoutDigest.split("/");
+  return parts[parts.length - 1] || withoutDigest;
+}
+
+function friendlyLogHostName(value?: string): string {
+  const host = String(value || "").trim();
+  if (!host) return "本机";
+  if (isOpaqueLogHostID(host)) return `主机 ${host.slice(0, 8)}`;
+  return host;
+}
+
+function isOpaqueLogHostID(value: string): boolean {
+  return value.length >= 32 && (value.match(/-/g) || []).length >= 4;
+}
+
+function shortLogStrategyLabel(summary: LogSummaryResponse | null): string {
+  const mode = summary?.mode || "";
+  if (mode === "lightweight") return "轻量日志";
+  if (mode === "observability") return "完整观测";
+  if (mode === "external") return "外部平台";
+  return summary?.label || "加载中";
 }
 
 function logSourceText(source: string): string {
@@ -3500,6 +3710,44 @@ function logLevelColor(level: string): string {
   if (value.includes("debug") || value.includes("trace")) return "purple";
   if (value.includes("info")) return "blue";
   return "default";
+}
+
+function logLevelTone(level: string): "error" | "warn" | "debug" | "info" | "plain" {
+  const value = String(level || "").toLowerCase();
+  if (value.includes("error") || value.includes("fatal") || value.includes("panic")) return "error";
+  if (value.includes("warn")) return "warn";
+  if (value.includes("debug") || value.includes("trace")) return "debug";
+  if (value.includes("info")) return "info";
+  return "plain";
+}
+
+function inferLogLevel(line: LogLine): string {
+  const level = String(line.level || "").trim().toLowerCase();
+  if (level) return level;
+  const message = String(line.message || "").toLowerCase();
+  if (/\b(fatal|panic)\b/.test(message)) return "fatal";
+  if (/\b(error|exception|failed|failure)\b/.test(message)) return "error";
+  if (/\b(warn|warning)\b/.test(message)) return "warn";
+  if (/\b(debug|trace)\b/.test(message)) return "debug";
+  if (/\b(info)\b/.test(message)) return "info";
+  return "log";
+}
+
+function renderHighlightedLogMessage(message: string, keyword: string): ReactNode {
+  const text = String(message || "");
+  const query = keyword.trim();
+  if (!query) return text;
+  const lower = text.toLowerCase();
+  const target = query.toLowerCase();
+  const index = lower.indexOf(target);
+  if (index < 0) return text;
+  return (
+    <>
+      {text.slice(0, index)}
+      <mark>{text.slice(index, index + query.length)}</mark>
+      {text.slice(index + query.length)}
+    </>
+  );
 }
 
 function logLineTime(value?: string): string {
