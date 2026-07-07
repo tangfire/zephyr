@@ -6,7 +6,6 @@ import {
   Checkbox,
   Col,
   Descriptions,
-  Dropdown,
   Drawer,
   Empty,
   Form,
@@ -788,6 +787,7 @@ function DeployObjectRowActions({
   onRun: (task: Task) => void;
 }) {
   const lastPipeline = item.pipelines[0];
+  const rollbackTask = deployObjectRollbackTask(item);
   return (
     <Space size={8} onClick={(event) => event.stopPropagation()}>
       {item.primaryTask && (
@@ -807,25 +807,31 @@ function DeployObjectRowActions({
           </span>
         </Tooltip>
       )}
-      {item.rollbackTask && (
-        <Tooltip title={taskDisabledTitle(currentUser, item.rollbackTask)}>
+      {rollbackTask && (
+        <Tooltip title={taskDisabledTitle(currentUser, rollbackTask)}>
           <span>
             <Button
               size="small"
               danger
-              loading={triggeringTaskIDSet.has(item.rollbackTask.id)}
-              disabled={!canRunTask(currentUser, item.rollbackTask)}
-              onClick={() => onRun(item.rollbackTask!)}
+              loading={triggeringTaskIDSet.has(rollbackTask.id)}
+              disabled={!canRunTask(currentUser, rollbackTask)}
+              onClick={() => onRun(rollbackTask)}
             >
               回退
             </Button>
           </span>
         </Tooltip>
       )}
-      <DeploymentExtraActions actions={item.extraTasks} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
       {lastPipeline ? <Button size="small" href={pipelineURL(woodpecker, lastPipeline)} target="_blank" icon={<ExternalLink size={14} />} /> : null}
     </Space>
   );
+}
+
+function deployObjectRollbackTask(item: DeployObject): Task | undefined {
+  if (!item.rollbackTask || !item.deployment) return undefined;
+  const row = item.deployment;
+  if (row.previous_branch || row.previous_commit || row.previous_pipeline || row.previous_deployed_at) return item.rollbackTask;
+  return undefined;
 }
 
 function DeployObjectExpandedPanel({
@@ -1911,7 +1917,7 @@ export function MonitoringView({
   onRefresh: () => void;
   onRun: (task: Task) => void;
 }) {
-  const cleanupTasks = new Map((state.tasks || []).map((task) => [task.id, task]));
+  const cleanupTasks = (state.tasks || []).filter(isCleanupTask);
   const links = summary?.links || state.links || {};
   const hosts = summary?.hosts || [];
   const alerts = summary?.alerts || [];
@@ -2040,7 +2046,7 @@ function MonitoringSystemTable({
   onRun
 }: {
   rows: MonitoringHost[];
-  cleanupTasks: Map<string, Task>;
+  cleanupTasks: Task[];
   currentUser: User;
   onRun: (task: Task) => void;
 }) {
@@ -2115,7 +2121,7 @@ function MonitoringSystemTable({
       width: 104,
       render: (_, row) => (
         <MonitoringHostActions
-          cleanupTask={row.cleanup_task_id ? cleanupTasks.get(row.cleanup_task_id) : undefined}
+          cleanupTask={cleanupTaskForMonitoringHost(row, cleanupTasks)}
           currentUser={currentUser}
           onRun={onRun}
         />
@@ -2162,7 +2168,7 @@ function MonitoringSystemTable({
                     <Text type="secondary">{row.uptime || "-"}</Text>
                   </div>
                   <MonitoringHostActions
-                    cleanupTask={row.cleanup_task_id ? cleanupTasks.get(row.cleanup_task_id) : undefined}
+                    cleanupTask={cleanupTaskForMonitoringHost(row, cleanupTasks)}
                     currentUser={currentUser}
                     onRun={onRun}
                   />
@@ -2209,6 +2215,54 @@ function MonitoringHostActions({
       </Tooltip>
     </Space>
   );
+}
+
+function cleanupTaskForMonitoringHost(host: MonitoringHost, tasks: Task[]): Task | undefined {
+  if (!tasks.length) return undefined;
+  if (host.cleanup_task_id) {
+    const explicit = tasks.find((task) => task.id === host.cleanup_task_id);
+    if (explicit) return explicit;
+  }
+  const hostText = normalizeKey([host.id, host.name, host.role].filter(Boolean).join(" "));
+  const scored = tasks
+    .map((task) => ({ task, score: cleanupTaskHostMatchScore(hostText, task) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || taskLibrarySort(a.task, b.task));
+  return scored[0]?.task;
+}
+
+function cleanupTaskHostMatchScore(hostText: string, task: Task): number {
+  const variables = task.variables || {};
+  const taskText = normalizeKey([
+    task.id,
+    task.title,
+    task.description,
+    task.group,
+    task.repo_name,
+    task.branch,
+    variables.DEPLOY_TARGET,
+    variables.TARGET_HOST,
+    variables.HOST,
+    variables.MACHINE,
+    variables.PEAPOD_PROJECT_ID,
+    variables.PEAPOD_PROJECT_NAME,
+    variables.ZEPHYR_PROJECT_ID,
+    variables.ZEPHYR_PROJECT_NAME
+  ].filter(Boolean).join(" "));
+  if (!hostText || !taskText) return 0;
+  let score = 0;
+  const pairs: Array<[RegExp, RegExp, number]> = [
+    [/novel|xzm|写书猫|production|生产/, /novel|xzm|写书猫|production|生产/, 8],
+    [/estar|estack|e站|边缘|edge|campus|lehu/, /estar|estack|e站|边缘|edge|campus|lehu/, 8],
+    [/builder|build|ops|test|测试|构建/, /builder|build|ops|test|测试|构建/, 8]
+  ];
+  for (const [hostPattern, taskPattern, value] of pairs) {
+    if (hostPattern.test(hostText) && taskPattern.test(taskText)) score += value;
+  }
+  for (const token of hostText.split("-").filter((item) => item.length >= 2)) {
+    if (taskText.includes(token)) score += 1;
+  }
+  return score;
 }
 
 function CompactMetric({ label, value }: { label?: string; value: number }) {
@@ -5270,41 +5324,6 @@ function taskVariableSummaryTags(task: Task): string[] {
     return fallback.length ? fallback : ["未配置变量"];
   }
   return tags;
-}
-
-function DeploymentExtraActions({
-  actions,
-  currentUser,
-  triggeringTaskIDSet,
-  onRun
-}: {
-  actions: Task[];
-  currentUser: User;
-  triggeringTaskIDSet: Set<string>;
-  onRun: (task: Task) => void;
-}) {
-  if (!actions.length) return null;
-  return (
-    <Dropdown
-      trigger={["click"]}
-      menu={{
-        items: actions.map((task) => ({
-          key: task.id,
-          label: productText(task.title),
-          danger: task.risk === "danger",
-          disabled: triggeringTaskIDSet.has(task.id) || !canRunTask(currentUser, task)
-        })),
-        onClick: ({ key }) => {
-          const task = actions.find((item) => item.id === key);
-          if (task && canRunTask(currentUser, task) && !triggeringTaskIDSet.has(task.id)) {
-            onRun(task);
-          }
-        }
-      }}
-    >
-      <Button size="small">更多</Button>
-    </Dropdown>
-  );
 }
 
 function monitoringSourceText(source: string): string {
