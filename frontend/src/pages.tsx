@@ -79,7 +79,6 @@ import type {
   RuntimeConfigInput,
   Risk,
   SetupConfigResponse,
-  SetupChecklistItem,
   StateResponse,
   Task,
   TaskConfig,
@@ -130,26 +129,31 @@ function PageIntro({
 }: {
   title: string;
   description: string;
-  stats: Array<{ label: string; value: string; tone?: "normal" | "success" | "warning" | "danger" }>;
+  stats?: Array<{ label: string; value: string; tone?: "normal" | "success" | "warning" | "danger" }>;
   actions?: ReactNode;
 }) {
+  const visibleStats = stats || [];
   return (
     <div className="page-intro">
       <div className="page-intro-copy">
         <Title level={3}>{title}</Title>
         <Text type="secondary">{description}</Text>
       </div>
-      <div className="page-intro-meta">
-        <div className="page-intro-stats">
-          {stats.map((item) => (
-            <div className={`page-intro-stat page-intro-stat-${item.tone || "normal"}`} key={item.label}>
-              <Text type="secondary">{item.label}</Text>
-              <Text strong>{item.value}</Text>
+      {(visibleStats.length > 0 || actions) && (
+        <div className="page-intro-meta">
+          {visibleStats.length > 0 && (
+            <div className="page-intro-stats">
+              {visibleStats.map((item) => (
+                <div className={`page-intro-stat page-intro-stat-${item.tone || "normal"}`} key={item.label}>
+                  <Text type="secondary">{item.label}</Text>
+                  <Text strong>{item.value}</Text>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {actions && <div className="page-intro-actions">{actions}</div>}
         </div>
-        {actions && <div className="page-intro-actions">{actions}</div>}
-      </div>
+      )}
     </div>
   );
 }
@@ -356,12 +360,11 @@ export function DeployPage({
     <Space direction="vertical" size={16} className="side-stack">
       <PageIntro
         title="部署"
-        description="先选对象，再看版本、动作和流水线。适合一个仓库部署到多个环境或机器。"
+        description="按项目和环境管理部署、回退与流水线，适合一个仓库部署到多台机器。"
         stats={[
-          { label: "对象", value: String(objects.length || 0) },
-          { label: "已验证", value: `${verifiedCount}/${rows.length || 0}`, tone: verifiedCount === rows.length && rows.length ? "success" : "normal" },
           { label: "运行/排队", value: String(runningCount), tone: runningCount ? "warning" : "success" },
-          { label: "需关注", value: String(attentionCount), tone: attentionCount ? "danger" : "success" }
+          { label: "需关注", value: String(attentionCount), tone: attentionCount ? "danger" : "success" },
+          { label: "已验证", value: `${verifiedCount}/${rows.length || 0}`, tone: verifiedCount === rows.length && rows.length ? "success" : "normal" }
         ]}
         actions={
           <Space className="deploy-intro-actions" wrap>
@@ -483,7 +486,6 @@ function DeployObjectConsole({
           />
           <DeployObjectMobileList
             objects={objects}
-            selectedID={selectedID}
             state={state}
             woodpecker={woodpecker}
             nowMs={nowMs}
@@ -491,8 +493,6 @@ function DeployObjectConsole({
             triggeringTaskIDSet={triggeringTaskIDSet}
             onRun={onRun}
             onSelect={onSelect}
-            onCancel={onCancel}
-            onInspect={onInspect}
           />
         </>
       )}
@@ -523,69 +523,51 @@ function DeployObjectListTable({
 }) {
   const columns: ProColumns<DeployObject>[] = [
     {
-      title: <Tooltip title="最近一次流水线或部署验证状态">状态</Tooltip>,
-      width: 76,
-      align: "center",
-      render: (_, row) => <DeployObjectHealthMark item={row} />
-    },
-    {
-      title: <Tooltip title="对象近期稳定性，结合失败、运行中和需关注项判断">健康度</Tooltip>,
-      width: 88,
-      align: "center",
+      title: "项目",
+      width: 280,
+      sorter: (a, b) => a.title.localeCompare(b.title, "zh-CN"),
       render: (_, row) => (
-        <Tooltip title={deployObjectWeatherText(row)}>
-          <span className={`deploy-weather deploy-weather-${row.risk}`} />
-        </Tooltip>
+        <div className="deploy-object-project-cell">
+          <DeployObjectHealthMark item={row} />
+          <Space direction="vertical" size={2} className="table-cell-stack">
+            <Space wrap size={[6, 4]}>
+              <Button type="link" className="deploy-object-name-link" onClick={(event) => { event.stopPropagation(); onSelect(row.id); }}>
+                {row.title}
+              </Button>
+              <DeployObjectStateTags item={row} />
+            </Space>
+            <Text type="secondary" ellipsis={{ tooltip: row.subtitle }}>{row.subtitle}</Text>
+          </Space>
+        </div>
       )
     },
     {
-      title: "名称",
-      width: 260,
-      sorter: (a, b) => a.title.localeCompare(b.title, "zh-CN"),
+      title: "环境 / 分支",
+      width: 210,
       render: (_, row) => (
-        <Space direction="vertical" size={1} className="table-cell-stack">
-          <Button type="link" className="deploy-object-name-link" onClick={(event) => { event.stopPropagation(); onSelect(row.id); }}>
-            {row.title}
-          </Button>
-          <Text type="secondary" ellipsis={{ tooltip: row.subtitle }}>{row.subtitle}</Text>
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <DeployObjectMetaCell value={row.environmentLabel} />
+          <Text type="secondary" ellipsis={{ tooltip: row.branchLabel }}>{row.branchLabel}</Text>
         </Space>
       )
     },
     {
-      title: "环境 / 机器",
-      width: 190,
-      render: (_, row) => <DeployObjectMetaCell value={row.environmentLabel} />
+      title: "线上版本",
+      width: 240,
+      render: (_, row) => <DeployObjectVersionCell item={row} nowMs={nowMs} state={state} />
     },
     {
-      title: "分支",
-      width: 180,
-      render: (_, row) => <DeployObjectMetaCell value={row.branchLabel} />
-    },
-    {
-      title: "上次成功",
-      width: 260,
-      render: (_, row) => <DeployObjectPipelineSnapshot row={lastPipelineByStatus(row, "success")} nowMs={nowMs} empty={row.deployment?.current_branch ? deploymentVersionText(row.deployment, nowMs) : "无"} />
-    },
-    {
-      title: "上次失败",
-      width: 250,
-      render: (_, row) => <DeployObjectPipelineSnapshot row={lastPipelineByStatus(row, "failed")} nowMs={nowMs} empty="无" />
-    },
-    {
-      title: "上次持续时间",
-      width: 150,
-      sorter: (a, b) => pipelineDurationSeconds(a.pipelines[0]) - pipelineDurationSeconds(b.pipelines[0]),
-      render: (_, row) => row.pipelines[0] ? <Text>{pipelineDurationText(row.pipelines[0], nowMs)}</Text> : <Text type="secondary">-</Text>
+      title: "最近流水线",
+      width: 230,
+      sorter: (a, b) => pipelineSortValue(a.pipelines[0]) - pipelineSortValue(b.pipelines[0]),
+      render: (_, row) => <DeployObjectPipelineOverview row={row.pipelines[0]} nowMs={nowMs} />
     },
     {
       title: "",
-      width: 120,
+      width: 160,
       fixed: "right",
       render: (_, row) => (
-        <Space size={6} onClick={(event) => event.stopPropagation()}>
-          <DeployObjectPrimaryRunButton item={row} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
-          {row.pipelines[0] ? <Button size="small" href={pipelineURL(woodpecker, row.pipelines[0])} target="_blank" icon={<ExternalLink size={14} />} /> : null}
-        </Space>
+        <DeployObjectRowActions item={row} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
       )
     }
   ];
@@ -605,16 +587,28 @@ function DeployObjectListTable({
         size="small"
         columns={columns}
         dataSource={objects}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署对象" /> }}
         search={false}
         options={false}
         tableAlertRender={false}
-        pagination={{ pageSize: 14, showSizeChanger: true, pageSizeOptions: [14, 30, 60], showTotal: (total) => `共 ${total} 个对象` }}
-        scroll={{ x: 1540 }}
+        pagination={objects.length > 14 ? { pageSize: 14, showSizeChanger: true, pageSizeOptions: [14, 30, 60], showTotal: (total) => `共 ${total} 个对象` } : false}
+        scroll={{ x: 1120 }}
         tableLayout="fixed"
         onRow={(row) => ({ onClick: () => onSelect(row.id) })}
       />
-      {!objects.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的对象" />}
     </Card>
+  );
+}
+
+function DeployObjectStateTags({ item }: { item: DeployObject }) {
+  const latest = item.pipelines[0];
+  return (
+    <>
+      <Tag color={item.kind === "deployment" ? "blue" : riskColors[item.risk] || "default"}>{item.kind === "deployment" ? "部署" : "动作"}</Tag>
+      <Tag color={item.statusColor}>{item.statusLabel}</Tag>
+      {latest && ["running", "pending"].includes(latest.status) && <Tag color="processing">#{latest.number} {statusText(latest.status)}</Tag>}
+      {item.attention && !["running", "pending"].includes(latest?.status || "") && <Tag color={item.risk === "danger" ? "red" : "gold"}>需关注</Tag>}
+    </>
   );
 }
 
@@ -651,28 +645,7 @@ function DeployObjectDetailView({
       </div>
       <div className="deploy-object-detail-layout">
         <aside className="deploy-object-detail-sidebar">
-          <div className="deploy-object-side-menu">
-            <button type="button" className="deploy-object-side-item deploy-object-side-item-active">
-              <Activity size={16} /> 状态
-            </button>
-            {item.primaryTask && (
-              <button type="button" className="deploy-object-side-item" disabled={!canRunTask(currentUser, item.primaryTask)} onClick={() => onRun(item.primaryTask!)}>
-                {item.kind === "deployment" ? <Rocket size={16} /> : <Play size={16} />}
-                {item.kind === "deployment" ? "部署" : "执行"}
-              </button>
-            )}
-            {item.rollbackTask && (
-              <button type="button" className="deploy-object-side-item deploy-object-side-danger" disabled={!canRunTask(currentUser, item.rollbackTask)} onClick={() => onRun(item.rollbackTask!)}>
-                <XCircle size={16} /> 回退
-              </button>
-            )}
-            {latest && (
-              <a className="deploy-object-side-item" href={pipelineURL(woodpecker, latest)} target="_blank" rel="noreferrer">
-                <ExternalLink size={16} /> 打开 Woodpecker
-              </a>
-            )}
-          </div>
-          <Card size="small" className="deploy-build-card" title="Builds">
+          <Card size="small" className="deploy-build-card" title="构建历史">
             <DeployBuildHistory rows={item.pipelines.slice(0, 12)} nowMs={nowMs} onInspect={onInspect} />
           </Card>
         </aside>
@@ -722,43 +695,23 @@ function deployObjectHealthText(status: string): string {
   return "状态未知";
 }
 
-function deployObjectWeatherText(item: DeployObject): string {
-  if (item.risk === "danger") return "健康度较差：有失败、异常或高风险动作";
-  if (item.risk === "warning") return "需要关注：有运行中、未验证或提醒项";
-  if (item.risk === "link") return "外部入口或链接类对象";
-  return "健康度正常";
-}
-
 function DeployObjectMetaCell({ value }: { value: string }) {
   return <Text ellipsis={{ tooltip: value }}>{value || "未标注"}</Text>;
 }
 
-function DeployObjectPrimaryRunButton({ item, currentUser, triggeringTaskIDSet, onRun }: { item: DeployObject; currentUser: User; triggeringTaskIDSet: Set<string>; onRun: (task: Task) => void }) {
-  if (!item.primaryTask) return <Text type="secondary">-</Text>;
-  const task = item.primaryTask;
+function DeployObjectPipelineOverview({ row, nowMs }: { row?: Pipeline; nowMs: number }) {
+  if (!row) return <Text type="secondary">暂无流水线</Text>;
   return (
-    <Tooltip title={taskDisabledTitle(currentUser, task)}>
-      <span>
-        <Button
-          size="small"
-          type="text"
-          className="deploy-run-icon-button"
-          icon={item.kind === "deployment" ? <Rocket size={17} /> : <Play size={17} />}
-          loading={triggeringTaskIDSet.has(task.id)}
-          disabled={!canRunTask(currentUser, task)}
-          onClick={() => onRun(task)}
-        />
-      </span>
-    </Tooltip>
-  );
-}
-
-function DeployObjectPipelineSnapshot({ row, nowMs, empty }: { row?: Pipeline; nowMs: number; empty: string }) {
-  if (!row) return <Text type="secondary">{empty}</Text>;
-  return (
-    <Space direction="vertical" size={0} className="table-cell-stack">
-      <Text>{pipelineActivityMetaText(row, nowMs)}</Text>
-      <Text type="secondary" ellipsis={{ tooltip: `#${row.number}-${row.branch || "-"}` }}>#{row.number}-{row.branch || "-"}</Text>
+    <Space direction="vertical" size={1} className="table-cell-stack">
+      <Space size={6} wrap>
+        <Text strong>#{row.number}</Text>
+        <Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag>
+        <Text type="secondary">{pipelineDurationText(row, nowMs)}</Text>
+      </Space>
+      <Text type="secondary" ellipsis={{ tooltip: `${row.branch || "-"} · ${(row.commit || "").slice(0, 8) || "-"}` }}>
+        {row.branch || "-"} · {(row.commit || "").slice(0, 8) || "-"}
+      </Text>
+      <Text type="secondary" ellipsis={{ tooltip: pipelineTaskText(row) }}>{pipelineTaskText(row)}</Text>
     </Space>
   );
 }
@@ -788,13 +741,12 @@ function DeployPipelineStatusDot({ status }: { status: string }) {
 
 function DeployObjectStatusStrip({ item, state, nowMs }: { item: DeployObject; state: StateResponse; nowMs: number }) {
   const latest = item.pipelines[0];
-  const actionText = latest ? pipelineTaskText(latest) : item.primaryTask ? pipelineTaskText(taskToPipelinePreview(state, item.primaryTask)) : "-";
+  const latestText = latest ? `#${latest.number} · ${statusText(latest.status)} · ${pipelineDurationText(latest, nowMs)}` : "暂无流水线";
   return (
     <div className="deploy-object-status-strip">
       <DeployObjectMetric label={item.kind === "deployment" ? "线上版本" : "默认仓库"} value={item.deployment ? deploymentVersionText(item.deployment, nowMs) : item.primaryTask ? repoName(state, item.primaryTask) : "-"} accent />
-      <DeployObjectMetric label="执行动作" value={actionText} />
-      <DeployObjectMetric label="最近触发" value={latest ? pipelineTriggerText(latest) : "暂无记录"} />
-      <DeployObjectMetric label="流水线耗时" value={latest ? pipelineDurationText(latest, nowMs) : "-"} />
+      <DeployObjectMetric label="最近流水线" value={latestText} />
+      <DeployObjectMetric label="触发来源" value={latest ? pipelineTriggerText(latest) : "暂无记录"} />
     </div>
   );
 }
@@ -960,19 +912,15 @@ function DeployObjectExpandedPanel({
 
 function DeployObjectMobileList({
   objects,
-  selectedID,
   state,
   woodpecker,
   nowMs,
   currentUser,
   triggeringTaskIDSet,
   onRun,
-  onSelect,
-  onCancel,
-  onInspect
+  onSelect
 }: {
   objects: DeployObject[];
-  selectedID: string;
   state: StateResponse;
   woodpecker: string;
   nowMs: number;
@@ -980,14 +928,13 @@ function DeployObjectMobileList({
   triggeringTaskIDSet: Set<string>;
   onRun: (task: Task) => void;
   onSelect: (id: string) => void;
-  onCancel: (row: Pipeline) => void;
-  onInspect: (row: Pipeline) => void;
 }) {
   return (
     <List
       className="mobile-deploy-object-list"
       dataSource={objects}
-      pagination={{ pageSize: 8, size: "small" }}
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署对象" /> }}
+      pagination={objects.length > 8 ? { pageSize: 8, size: "small" } : false}
       renderItem={(item) => (
         <List.Item>
           <Space direction="vertical" size={10} className="side-stack">
@@ -995,26 +942,22 @@ function DeployObjectMobileList({
               title={
                 <Space wrap>
                   <Text strong>{item.title}</Text>
-                  <Tag color={item.statusColor}>{item.statusLabel}</Tag>
-                  {item.attention && <Tag color="red">关注</Tag>}
+                  <DeployObjectStateTags item={item} />
                 </Space>
               }
               description={
                 <Space direction="vertical" size={4} className="side-stack">
                   <Text type="secondary">{item.subtitle}</Text>
+                  <Text type="secondary">{item.environmentLabel} · {item.branchLabel}</Text>
                   <DeployObjectVersionCell item={item} nowMs={nowMs} state={state} />
+                  <DeployObjectPipelineOverview row={item.pipelines[0]} nowMs={nowMs} />
                 </Space>
               }
             />
             <Space size={8} wrap>
               <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
-              <Button size="small" onClick={() => onSelect(selectedID === item.id ? "" : item.id)}>
-                {selectedID === item.id ? "收起" : "详情"}
-              </Button>
+              <Button size="small" onClick={() => onSelect(item.id)}>详情</Button>
             </Space>
-            {selectedID === item.id && (
-              <DeployObjectExpandedPanel item={item} state={state} woodpecker={woodpecker} nowMs={nowMs} onCancel={onCancel} onInspect={onInspect} />
-            )}
           </Space>
         </List.Item>
       )}
@@ -1124,17 +1067,19 @@ function DeployObjectPipelineTable({
         size="small"
         columns={columns}
         dataSource={rows}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无相关流水线" /> }}
         search={false}
         options={false}
         tableAlertRender={false}
-        pagination={{ pageSize: 8, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
+        pagination={rows.length > 8 ? { pageSize: 8, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` } : false}
         scroll={{ x: 760 }}
         tableLayout="fixed"
       />
       <List
         className="mobile-pipeline-list deploy-object-mobile-pipeline-list"
         dataSource={rows}
-        pagination={{ pageSize: 8, size: "small" }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无相关流水线" /> }}
+        pagination={rows.length > 8 ? { pageSize: 8, size: "small" } : false}
         renderItem={(row) => (
           <List.Item
             actions={[
@@ -1230,8 +1175,6 @@ export function SettingsPage({
   onEditTask: (task: Task) => void;
   onDeleteTask: (task: Task) => void;
 }) {
-  const externalLinkCount = (state.tasks || []).filter((task) => task.external_url).length;
-  const configurableTaskCount = (state.tasks || []).filter((task) => !task.external_url).length;
   const screens = Grid.useBreakpoint();
   const compactSettingsNav = !screens.md;
   const [activeSetting, setActiveSetting] = useState("setup");
@@ -1241,6 +1184,12 @@ export function SettingsPage({
       label: "接入向导",
       shortLabel: "接入",
       children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
+    },
+    {
+      key: "core",
+      label: "核心服务",
+      shortLabel: "核心",
+      children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} initialSection="core" /> : <Alert type="info" showIcon message="核心服务配置只允许管理员查看和修改" />
     },
     {
       key: "hosts",
@@ -1291,11 +1240,6 @@ export function SettingsPage({
       <PageIntro
         title="设置"
         description="成员、仓库、任务和底层入口集中维护。日常部署不用进入这里。"
-        stats={[
-          { label: "成员", value: state.auth_mode === "db" ? String(state.current_user.role === "admin" ? "可管理" : "个人") : "共享" },
-          { label: "任务", value: String(configurableTaskCount) },
-          { label: "入口", value: String(externalLinkCount) }
-        ]}
       />
       {compactSettingsNav ? (
         <Space direction="vertical" size={12} className="side-stack">
@@ -1332,23 +1276,26 @@ export function TaskRunContext({ task, statuses, nowMs }: { task: Task; statuses
   const status = deploymentStatusForTask(task, statuses);
   if (!status) return null;
   const rollback = isRollbackTask(task);
+  const currentVersion = status.current_branch ? `${status.current_branch} · ${(status.current_commit || "").slice(0, 8) || "-"}` : "暂无成功部署";
+  const currentAge = status.last_deployed_at ? deployedAgeText(status.last_deployed_at, nowMs) : "";
+  const latestRun = `${status.latest_action || "-"} · ${statusText(status.latest_status)}`;
+  const latestAge = status.latest_at ? deployedAgeText(status.latest_at, nowMs) : "";
+  const rollbackTarget = status.previous_branch ? `${status.previous_branch} · ${(status.previous_commit || "").slice(0, 8) || "-"}` : "由部署脚本按服务器记录决定";
   return (
-    <div className="run-context">
-      <Descriptions size="small" column={1} bordered>
-        <Descriptions.Item label="线上版本">
-          {status.current_branch ? `${status.current_branch} · ${(status.current_commit || "").slice(0, 8) || "-"}` : "暂无成功部署"}
-          {status.last_deployed_at ? ` · ${deployedAgeText(status.last_deployed_at, nowMs)}` : ""}
-        </Descriptions.Item>
-        <Descriptions.Item label="最近执行">
-          {status.latest_action || "-"} · {statusText(status.latest_status)}
-          {status.latest_at ? ` · ${deployedAgeText(status.latest_at, nowMs)}` : ""}
-        </Descriptions.Item>
-        {rollback && (
-          <Descriptions.Item label="上一成功版本">
-            {status.previous_branch ? `${status.previous_branch} · ${(status.previous_commit || "").slice(0, 8) || "-"}` : "当前列表里没有上一成功版本；实际回退目标由部署脚本按服务器记录决定"}
-          </Descriptions.Item>
-        )}
-      </Descriptions>
+    <div className="run-context-strip">
+      <RunContextMetric label="线上" value={currentVersion} meta={currentAge} accent />
+      <RunContextMetric label="最近" value={latestRun} meta={latestAge} />
+      {rollback && <RunContextMetric label="回退到" value={rollbackTarget} />}
+    </div>
+  );
+}
+
+function RunContextMetric({ label, value, meta, accent = false }: { label: string; value: string; meta?: string; accent?: boolean }) {
+  return (
+    <div className={`run-context-metric ${accent ? "run-context-metric-accent" : ""}`}>
+      <Text type="secondary">{label}</Text>
+      <Text strong ellipsis={{ tooltip: value }}>{value}</Text>
+      {meta && <Text type="secondary">{meta}</Text>}
     </div>
   );
 }
@@ -1469,12 +1416,12 @@ function TaskTable({
         search={false}
         options={false}
         tableAlertRender={false}
-        pagination={{
+        pagination={data.length > 8 ? {
           pageSize: 8,
           showSizeChanger: true,
           pageSizeOptions: [8, 16, 32],
           showTotal: (total) => `共 ${total} 个动作`
-        }}
+        } : false}
         scroll={{ x: 980 }}
         tableLayout="fixed"
         expandable={{
@@ -1643,167 +1590,6 @@ export function DeployErrorContent({ error, task }: { error: unknown; task: Task
   );
 }
 
-function DeploymentStatusTable({
-  rows,
-  woodpecker,
-  nowMs,
-  tasks,
-  currentUser,
-  triggeringTaskIds,
-  onRun
-}: {
-  rows: DeploymentStatus[];
-  woodpecker: string;
-  nowMs: number;
-  tasks: Task[];
-  currentUser: User;
-  triggeringTaskIds: string[];
-  onRun: (task: Task) => void;
-}) {
-  const triggeringTaskIDSet = useMemo(() => new Set(triggeringTaskIds), [triggeringTaskIds]);
-  const displayRows = useMemo(() => sortDeploymentRows(rows), [rows]);
-  const columns: ProColumns<DeploymentStatus>[] = [
-    {
-      title: "项目",
-      width: 190,
-      render: (_, row) => (
-        <Space direction="vertical" size={0} className="table-cell-stack">
-          <Text strong ellipsis={{ tooltip: productText(row.name) }}>{productText(row.name)}</Text>
-          <Text type="secondary" ellipsis={{ tooltip: deploymentScopeText(row) }}>{deploymentScopeText(row)}</Text>
-        </Space>
-      )
-    },
-    {
-      title: "线上版本",
-      width: 220,
-      render: (_, row) => (
-        <Space direction="vertical" size={2} className="deployment-version-cell">
-          {row.current_branch ? (
-            <Space size={6} wrap>
-              <Tag color={row.current_branch === row.configured_branch ? "green" : "gold"}>{row.current_branch}</Tag>
-              {row.current_branch !== row.configured_branch && <Text type="warning">与配置不同</Text>}
-              <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
-            </Space>
-          ) : (
-            <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
-          )}
-          <Text code={Boolean(row.current_commit)}>{deploymentCommitLine(row)}</Text>
-          {row.actual_commit && !commitLooksSame(row.actual_commit, row.current_commit) && (
-            <Text type="warning">实际：{row.actual_commit.slice(0, 8)}</Text>
-          )}
-          <Text type="secondary" ellipsis={{ tooltip: row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}` }}>{row.last_deployed_at ? `${formatUnixTime(row.last_deployed_at)} · ${deployedAgeText(row.last_deployed_at, nowMs)}` : `配置：${row.configured_branch || "main"}`}</Text>
-          {row.deploy_verify_message && !row.deploy_verified && (
-            <Tooltip title={row.deploy_verify_message}>
-              <Tag className="deployment-verify-note" color={deployVerifyColor(row)}>{shortDeploymentVerifyMessage(row)}</Tag>
-            </Tooltip>
-          )}
-        </Space>
-      )
-    },
-    {
-      title: "最近执行",
-      width: 200,
-      render: (_, row) => (
-        <Space direction="vertical" size={0} className="table-cell-stack">
-          <Space size={6}>
-            <Text ellipsis={{ tooltip: productText(row.latest_action || row.last_action || "-") }}>{productText(row.latest_action || row.last_action || "-")}</Text>
-            <Tag color={statusColors[row.latest_status || row.last_status] || "default"}>{statusText(row.latest_status || row.last_status)}</Tag>
-          </Space>
-          <Text type="secondary">
-            {[row.latest_triggered_by || row.triggered_by, row.latest_at ? formatUnixTime(row.latest_at) : ""].filter(Boolean).join(" · ") || "-"}
-          </Text>
-        </Space>
-      )
-    },
-    {
-      title: "上一成功版本",
-      width: 150,
-      render: (_, row) => (
-        <Space direction="vertical" size={0} className="table-cell-stack">
-          <Text>{row.previous_branch || "-"}</Text>
-          <Text code={Boolean(row.previous_commit)}>{(row.previous_commit || "").slice(0, 8) || "-"}</Text>
-          {row.previous_deployed_at ? <Text type="secondary">{deployedAgeText(row.previous_deployed_at, nowMs)}</Text> : null}
-        </Space>
-      )
-    },
-    {
-      title: "",
-      width: 180,
-      render: (_, row) => {
-        const actions = deploymentActionsForStatus(row, tasks);
-        return (
-          <Space>
-            {actions.deploy && (
-              <Tooltip title={taskDisabledTitle(currentUser, actions.deploy)}>
-                <span>
-                  <Button size="small" type="primary" loading={triggeringTaskIDSet.has(actions.deploy.id)} disabled={!canRunTask(currentUser, actions.deploy)} onClick={() => onRun(actions.deploy!)}>
-                    部署
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
-            {actions.rollback && (
-              <Tooltip title={taskDisabledTitle(currentUser, actions.rollback)}>
-                <span>
-                  <Button size="small" danger loading={triggeringTaskIDSet.has(actions.rollback.id)} disabled={!canRunTask(currentUser, actions.rollback)} onClick={() => onRun(actions.rollback!)}>
-                    回退
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
-            <DeploymentExtraActions actions={actions.extras} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
-            {row.pipeline ? <Button size="small" href={deploymentPipelineURL(woodpecker, row)} target="_blank" icon={<ExternalLink size={14} />} /> : null}
-          </Space>
-        );
-      }
-    }
-  ];
-
-  return (
-    <>
-      <ProTable<DeploymentStatus>
-        className="desktop-deployment-table"
-        rowKey={(row) => row.id}
-        size="small"
-        columns={columns}
-        dataSource={displayRows}
-        search={false}
-        options={false}
-        tableAlertRender={false}
-        pagination={false}
-        scroll={{ x: 940 }}
-        tableLayout="fixed"
-      />
-      <List
-        className="mobile-deployment-list"
-        dataSource={displayRows}
-        renderItem={(row) => (
-          <List.Item
-            actions={[
-              ...mobileDeploymentActions(row, tasks, currentUser, triggeringTaskIDSet, onRun),
-              row.pipeline ? <Button key="open" size="small" href={deploymentPipelineURL(woodpecker, row)} target="_blank" icon={<ExternalLink size={14} />} /> : null
-            ].filter(Boolean)}
-          >
-            <List.Item.Meta
-              title={<Space><Text strong>{productText(row.name)}</Text><Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag></Space>}
-              description={
-                <Space direction="vertical" size={4} className="side-stack">
-                  <Text type="secondary">{deploymentScopeText(row)} · 配置 {row.configured_branch || "main"}</Text>
-                  <Text>{deploymentVersionText(row, nowMs)}</Text>
-                  {row.deploy_verify_message && <Text type={row.deploy_verified ? "secondary" : "warning"}>{shortDeploymentVerifyMessage(row)}</Text>}
-                  <Text type="secondary">
-                    最近执行：{productText(row.latest_action || "-")} · {row.latest_at ? `${formatUnixTime(row.latest_at)} · ${deployedAgeText(row.latest_at, nowMs)}` : "-"}
-                  </Text>
-                </Space>
-              }
-            />
-          </List.Item>
-        )}
-      />
-    </>
-  );
-}
-
 function PipelineTable({
   rows,
   woodpecker,
@@ -1903,17 +1689,19 @@ function PipelineTable({
         size="small"
         columns={columns}
         dataSource={rows}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无流水线" /> }}
         search={false}
         options={false}
         tableAlertRender={false}
-        pagination={{ pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 30], showTotal: (total) => `共 ${total} 条` }}
+        pagination={rows.length > 12 ? { pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 30], showTotal: (total) => `共 ${total} 条` } : false}
         scroll={{ x: 1060 }}
         tableLayout="fixed"
       />
       <List
         className="mobile-pipeline-list"
         dataSource={rows}
-        pagination={{ pageSize: 12, size: "small" }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无流水线" /> }}
+        pagination={rows.length > 12 ? { pageSize: 12, size: "small" } : false}
         renderItem={(row) => (
           <List.Item
             actions={[
@@ -2103,11 +1891,6 @@ export function MonitoringView({
       <PageIntro
         title="监控"
         description="机器资源、核心容器和降级原因集中查看。"
-        stats={[
-          { label: "状态", value: alertLevel === "critical" ? "异常" : alertLevel === "warning" ? "提醒" : "正常", tone: alertLevel === "critical" ? "danger" : alertLevel === "warning" ? "warning" : "success" },
-          { label: "机器", value: String(hosts.length || 0) },
-          { label: "来源", value: summary?.source ? monitoringSourceText(summary.source) : "-" }
-        ]}
         actions={
           <Space wrap>
             {links.beszel && <Button href={links.beszel} target="_blank" icon={<ExternalLink size={15} />}>Beszel</Button>}
@@ -2244,7 +2027,7 @@ function MonitoringSystemTable({
               <Text strong>{row.name}</Text>
               <Tag color={monitoringStatusColor(row.status)}>{monitoringHostStatusText(row.status)}</Tag>
             </Space>
-            <Text type="secondary" className="monitor-system-meta">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
+            <Text type="secondary" className="monitor-system-meta">{monitoringHostMeta(row)}</Text>
           </div>
         </div>
       )
@@ -2317,12 +2100,14 @@ function MonitoringSystemTable({
         size="small"
         columns={columns}
         dataSource={rows}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无机器资源" /> }}
         pagination={false}
         scroll={{ x: 1110 }}
       />
       <List
         className="mobile-monitor-system-list"
         dataSource={rows}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无机器资源" /> }}
         renderItem={(row) => (
           <List.Item>
             <List.Item.Meta
@@ -2335,7 +2120,7 @@ function MonitoringSystemTable({
               }
               description={
                 <Space direction="vertical" size={8} className="side-stack">
-                  <Text type="secondary">{monitoringRoleText(row.role)} · {row.message || "监控正常"}</Text>
+                  <Text type="secondary">{monitoringHostMeta(row)}</Text>
                   <div className="mobile-monitor-metrics">
                     <CompactMetric label="CPU" value={row.cpu_percent || 0} />
                     <CompactMetric label="内存" value={row.memory_percent || 0} />
@@ -2453,12 +2238,14 @@ function MonitoringContainerTable({ rows }: { rows: MonitoringContainer[] }) {
         size="small"
         columns={columns}
         dataSource={rows}
-        pagination={{ pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 30], showTotal: (total) => `共 ${total} 个` }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无核心容器" /> }}
+        pagination={rows.length > 12 ? { pageSize: 12, showSizeChanger: true, pageSizeOptions: [12, 30], showTotal: (total) => `共 ${total} 个` } : false}
         scroll={{ x: 920 }}
       />
       <List
         className="mobile-monitor-container-list"
         dataSource={rows}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无核心容器" /> }}
         renderItem={(row) => (
           <List.Item>
             <List.Item.Meta
@@ -2596,11 +2383,6 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
       <PageIntro
         title="日志"
         description="聚合 Docker 已保留日志，快速筛选服务、错误和请求。"
-        stats={[
-          { label: "查询源", value: querySourceText, tone: activeSource.includes("dozzle_mcp") ? "success" : activeSource === "ssh_fallback" ? "warning" : "danger" },
-          { label: "容器", value: `${healthyContainers}/${summary?.container_count ?? containers.length}`, tone: healthyContainers ? "normal" : "warning" },
-          { label: "保留", value: summary?.docker_retention || "20m × 3", tone: "normal" }
-        ]}
         actions={
           <Space wrap>
             {summary?.dozzle_public_url && <Button href={summary.dozzle_public_url} target="_blank" icon={<ExternalLink size={15} />}>Dozzle</Button>}
@@ -2647,24 +2429,20 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
                     </Space>
                   </div>
                   <div className="log-source-items">
-                    {group.items.map((item) => {
-                      const value = logContainerValue(item);
-                      const checked = selectedSet.has(value);
-                      return (
-                        <button
-                          type="button"
-                          className={`log-source-item ${checked ? "log-source-item-active" : ""}`}
-                          key={value}
-                          onClick={() => toggleContainer(value)}
-                        >
-                          <Checkbox checked={checked} onChange={() => toggleContainer(value)} onClick={(event) => event.stopPropagation()} />
-                          <span className="log-source-item-main">
-                            <Text strong ellipsis>{item.name}</Text>
-                            <Text type="secondary" ellipsis>{logContainerMeta(item)}</Text>
-                          </span>
-                        </button>
-                      );
-                    })}
+                        {group.items.map((item) => {
+                          const value = logContainerValue(item);
+                          const checked = selectedSet.has(value);
+                          const meta = logContainerMeta(item);
+                          return (
+                            <label className={`log-source-item ${checked ? "log-source-item-active" : ""}`} key={value}>
+                              <Checkbox checked={checked} onChange={() => toggleContainer(value)} />
+                              <span className="log-source-item-main">
+                                <Text strong ellipsis>{item.name}</Text>
+                                {meta && <Text type="secondary" ellipsis>{meta}</Text>}
+                              </span>
+                            </label>
+                          );
+                        })}
                   </div>
                 </div>
               )) : (
@@ -2980,7 +2758,7 @@ function AuditLogView({
         loading={loading}
         columns={columns}
         dataSource={records}
-        pagination={{ pageSize: 14, showSizeChanger: true, pageSizeOptions: [14, 30, 60], showTotal: (total) => `共 ${total} 条` }}
+        pagination={records.length > 14 ? { pageSize: 14, showSizeChanger: true, pageSizeOptions: [14, 30, 60], showTotal: (total) => `共 ${total} 条` } : false}
         scroll={{ x: 1050 }}
       />
     </Card>
@@ -3317,7 +3095,6 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
                 <Tag>{lookupResult.default_branch || "main"}</Tag>
                 {lookupResult.id ? <Tag color="green">已启用 Repo ID {lookupResult.id}</Tag> : <Tag color="gold">待启用</Tag>}
               </Space>
-              <Text type="secondary">forge_remote_id：{lookupResult.forge_remote_id || "-"}</Text>
               <Space wrap>
                 {lookupResult.id ? (
                   <Button type="primary" loading={savingID === lookupResult.id} onClick={() => saveRepo(lookupResult)}>
@@ -3366,10 +3143,14 @@ function SetupGuidePanel({
   onDoctorRun: () => void;
 }) {
   const checklist = setup?.checklist || [];
+  const issueItems = checklist.filter((item) => !["ok", "optional"].includes(item.status));
+  const quietCount = Math.max(0, checklist.length - issueItems.length);
+  const visibleIssues = issueItems.slice(0, 3);
   const verification = setup?.deployment_verification_summary;
   const logStrategy = setup?.log_strategy;
   const onboarding = setup?.onboarding;
   const doctorChecks = setup?.doctor?.checks || [];
+  const doctorIssueCount = doctorChecks.filter((item) => item.status !== "ok").length;
   return (
     <ProCard
       title="接入向导"
@@ -3403,26 +3184,31 @@ function SetupGuidePanel({
             {logStrategy ? <LogStrategyCard status={logStrategy} compact /> : <Card size="small" loading />}
           </Col>
         </Row>
-        <Row gutter={[12, 12]}>
-          {checklist.map((item) => (
-            <Col xs={24} md={12} xl={8} key={item.id}>
-              <ChecklistCard item={item} />
-            </Col>
-          ))}
-          {!checklist.length && (
-            <Col span={24}>
-              <Alert type="info" showIcon message="正在加载接入检查" />
-            </Col>
-          )}
-        </Row>
-        {doctorChecks.length > 0 && (
-          <Card size="small" title="体检摘要" className="doctor-summary-card">
+        <Card
+          size="small"
+          className="setup-focus-card"
+          title={
+            <Space wrap>
+              <Text strong>待处理项</Text>
+              {issueItems.length ? <Tag color="gold">{issueItems.length} 项</Tag> : <Tag color="green">无阻断</Tag>}
+            </Space>
+          }
+          extra={quietCount ? <Text type="secondary">{quietCount} 项已就绪/可选，已收起</Text> : undefined}
+        >
+          {!checklist.length ? (
+            <Alert type="info" showIcon message="正在加载接入检查" />
+          ) : visibleIssues.length ? (
             <List
               size="small"
-              dataSource={doctorChecks.slice(0, 8)}
+              className="setup-focus-list"
+              dataSource={visibleIssues}
               renderItem={(item) => (
                 <List.Item
-                  actions={item.action_url ? [<Button key="open" size="small" href={item.action_url} target="_blank">{item.action_label || "打开"}</Button>] : undefined}
+                  actions={item.action_url ? [
+                    <Button key="open" size="small" href={item.action_url} target="_blank" icon={<ExternalLink size={14} />}>
+                      {item.action_label || "打开"}
+                    </Button>
+                  ] : undefined}
                 >
                   <List.Item.Meta
                     title={
@@ -3431,12 +3217,30 @@ function SetupGuidePanel({
                         <Text strong>{item.title}</Text>
                       </Space>
                     }
-                    description={item.fix ? `${item.message} · ${item.fix}` : item.message}
+                    description={
+                      <Space direction="vertical" size={2} className="side-stack">
+                        <Text type="secondary">{item.message}</Text>
+                        {item.fix && <Text className="checklist-fix">{item.fix}</Text>}
+                      </Space>
+                    }
                   />
                 </List.Item>
               )}
             />
-          </Card>
+          ) : (
+            <Alert type="success" showIcon message="核心接入项已就绪" description="可选入口和历史说明已收进对应设置分组，日常只需要关注阻断项。" />
+          )}
+          {issueItems.length > visibleIssues.length && (
+            <Text type="secondary">还有 {issueItems.length - visibleIssues.length} 项已收起，可在对应设置分组里处理。</Text>
+          )}
+        </Card>
+        {doctorChecks.length > 0 && (
+          <Alert
+            type={doctorIssueCount ? "warning" : "success"}
+            showIcon
+            message={doctorIssueCount ? `体检发现 ${doctorIssueCount} 个需确认项` : "体检未发现新的阻断项"}
+            description="体检结果已归并到上面的待处理项，避免同一问题重复出现。"
+          />
         )}
       </Space>
     </ProCard>
@@ -3629,26 +3433,6 @@ function TaskTemplatePanel({ state, onApplied }: { state: StateResponse; onAppli
   );
 }
 
-function ChecklistCard({ item }: { item: SetupChecklistItem }) {
-  return (
-    <Card size="small" className="setup-checklist-card">
-      <Space direction="vertical" size={8} className="side-stack">
-        <Space align="center" className="setup-status-head">
-          <Tag color={setupStatusColor(item.status)}>{setupStatusText(item.status)}</Tag>
-          <Text strong>{item.title}</Text>
-        </Space>
-        <Text type="secondary">{item.message}</Text>
-        {item.fix && <Text className="checklist-fix">{item.fix}</Text>}
-        {item.action_url && (
-          <Button size="small" href={item.action_url} target="_blank" icon={<ExternalLink size={14} />}>
-            {item.action_label || "打开"}
-          </Button>
-        )}
-      </Space>
-    </Card>
-  );
-}
-
 function VerificationSummaryCard({ summary }: { summary?: DeploymentVerificationSummary }) {
   const missing = summary?.missing_count || 0;
   return (
@@ -3695,7 +3479,9 @@ function LogStrategyCard({ status, compact = false }: { status: LogStrategyStatu
   );
 }
 
-function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: () => Promise<void>; initialSection?: "guide" | "hosts" | "logs" }) {
+type SetupSection = "guide" | "core" | "hosts" | "logs";
+
+function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: () => Promise<void>; initialSection?: SetupSection }) {
   const { message } = AntApp.useApp();
   const [form] = Form.useForm<RuntimeConfigInput>();
   const [setup, setSetup] = useState<SetupConfigResponse | null>(null);
@@ -3703,18 +3489,18 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
   const [saving, setSaving] = useState(false);
   const [doctorRunning, setDoctorRunning] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const focusTitle = initialSection === "hosts" ? "环境与机器" : initialSection === "logs" ? "日志策略" : "接入向导";
+  const focusTitle = initialSection === "hosts" ? "环境与机器" : initialSection === "logs" ? "日志策略" : initialSection === "core" ? "核心服务" : "接入向导";
   const focusDescription = initialSection === "hosts"
     ? "这里维护运维机、生产机、测试机和普通业务机。日志页会复用这些机器的 SSH 配置读取远端容器日志。"
     : initialSection === "logs"
       ? "这里选择轻量 Dozzle 或完整 Grafana/Loki，并配置日志入口与 Docker 日志保留策略。"
-      : "先把核心组件接起来，再逐步补齐仓库、监控、日志和部署验证。";
+      : initialSection === "core"
+        ? "这里配置 Peapod、Woodpecker 和 Beszel 的服务地址与 API 凭据。"
+        : "先看上线阻断项，再进入对应设置分组处理。";
   const showGuide = initialSection === "guide";
-  const showCore = initialSection === "guide";
+  const showCore = initialSection === "core";
   const showLogs = initialSection === "logs";
   const showHosts = initialSection === "hosts";
-  const showLinks = initialSection === "guide";
-  const showSupport = initialSection === "guide";
   const monitorHostCount = setup?.config?.monitor_hosts?.length || 0;
 
   async function loadSetup(options: { notify?: boolean } = {}) {
@@ -3818,20 +3604,18 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
           </Row>
         </ProCard>
       )}
+      {(showCore || showLogs || showHosts) && (
       <Form form={form} layout="vertical" onFinish={save} disabled={loading} onValuesChange={() => setDirty(true)}>
         <div className="setup-action-bar">
           <Space direction="vertical" size={2}>
             <Text strong>{focusTitle}</Text>
-            <Text type="secondary">{showSupport ? "Secret 留空保存会保留原值。" : "只保存当前表单里显示的配置项，Secret 留空会保留原值。"}</Text>
+            <Text type="secondary">只保存当前表单里显示的配置项，Secret 留空会保留原值。</Text>
           </Space>
           <Space wrap className="setup-action-buttons">
             {dirty && <Tag color="gold">待保存</Tag>}
-            <Button icon={<RefreshCw size={16} />} loading={loading} onClick={() => loadSetup({ notify: true })}>
-              刷新
-            </Button>
-            {showGuide && (
-              <Button icon={<Gauge size={16} />} loading={doctorRunning} onClick={runDoctor}>
-                体检
+            {!showGuide && (
+              <Button icon={<RefreshCw size={16} />} loading={loading} onClick={() => loadSetup({ notify: true })}>
+                刷新
               </Button>
             )}
             <Button type="primary" htmlType="submit" loading={saving}>
@@ -4075,97 +3859,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
         </ProCard>
         )}
 
-        {showLinks && (
-        <ProCard
-          title="外部入口"
-          className="setup-form-card"
-        >
-          <Form.List name="external_links">
-            {(fields, { add, remove }) => (
-              <Space direction="vertical" size={10} className="side-stack">
-                <div>
-                  <Button icon={<Plus size={16} />} onClick={() => add({ id: "", title: "", url: "", group: "基础设施" })}>
-                    新增入口
-                  </Button>
-                </div>
-                {fields.map((field) => (
-                  <Card size="small" key={field.key}>
-                    <Row gutter={12}>
-                      <Col xs={24} md={4}>
-                        <Form.Item label="ID" name={[field.name, "id"]}>
-                          <Input placeholder="grafana" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={5}>
-                        <Form.Item label="标题" name={[field.name, "title"]}>
-                          <Input placeholder="Grafana" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={5}>
-                        <Form.Item label="分组" name={[field.name, "group"]}>
-                          <Input placeholder="观测" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={8}>
-                        <Form.Item label="地址" name={[field.name, "url"]}>
-                          <Input placeholder="https://grafana.example.com" />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={2}>
-                        <Form.Item label=" ">
-                          <Button danger icon={<Trash2 size={14} />} onClick={() => remove(field.name)} />
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                    <Form.Item label="说明" name={[field.name, "description"]}>
-                      <Input placeholder="查看日志、指标、链路和仪表盘" />
-                    </Form.Item>
-                  </Card>
-                ))}
-                {!fields.length && <Text type="secondary">暂无额外入口；{PRODUCT_NAME}、Woodpecker、Beszel、Dozzle、Grafana 会自动显示。</Text>}
-              </Space>
-            )}
-          </Form.List>
-        </ProCard>
-        )}
-
-        <div className="setup-action-footer">
-          <Button type="primary" htmlType="submit" loading={saving} size="large">
-            保存{focusTitle}
-          </Button>
-        </div>
       </Form>
-
-      {showSupport && (
-      <ProCard title="业务机接入命令">
-        <Row gutter={[12, 12]}>
-          {(setup?.commands || []).map((item) => (
-            <Col xs={24} lg={12} key={item.id}>
-              <Card size="small" title={item.title}>
-                <Space direction="vertical" size={8} className="side-stack">
-                  <Text type="secondary">{item.description}</Text>
-                  <Typography.Paragraph copyable className="command-block">
-                    {item.command}
-                  </Typography.Paragraph>
-                </Space>
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      </ProCard>
-      )}
-
-      {showSupport && (
-      <ProCard title="文档">
-        <List
-          dataSource={setup?.docs || []}
-          renderItem={(item) => (
-            <List.Item>
-              <List.Item.Meta title={item.title} description={`${item.description} · ${item.path}`} />
-            </List.Item>
-          )}
-        />
-      </ProCard>
       )}
     </Space>
   );
@@ -4193,11 +3887,9 @@ function TaskConfigView({
         </Button>
       }
     >
-      <Descriptions column={1} bordered size="small">
-        <Descriptions.Item label="配置文件">/data/tasks.json</Descriptions.Item>
-        <Descriptions.Item label="已保存覆盖/自定义">{config?.tasks?.length || 0}</Descriptions.Item>
-        <Descriptions.Item label="用途">这里维护默认任务配置；临时换分支可以在点“执行”时选择，不会改默认配置。</Descriptions.Item>
-      </Descriptions>
+      <div className="config-task-summary">
+        <Text type="secondary">已保存覆盖/自定义 {config?.tasks?.length || 0} 个；默认分支和变量在这里维护，临时执行分支在部署确认时选择。</Text>
+      </div>
       <Table
         className="config-task-table"
         rowKey="id"
@@ -4355,10 +4047,6 @@ function isRecentFailedPipeline(row: Pipeline, nowMs: number): boolean {
 
 export function pipelineURL(base: string, row: Pipeline): string {
   return `${base.replace(/\/+$/, "")}/repos/${row.repo_id}/pipeline/${row.number}`;
-}
-
-function deploymentPipelineURL(base: string, row: DeploymentStatus): string {
-  return `${base.replace(/\/+$/, "")}/repos/${row.repo_id}/pipeline/${row.pipeline}`;
 }
 
 function auditPipelineURL(base: string, row: AuditRecord): string {
@@ -4526,9 +4214,17 @@ function logContainerSortWeight(item: LogContainer): number {
 }
 
 function logContainerMeta(item: LogContainer): string {
-  const state = [item.state, item.health].filter(Boolean).join(" / ");
   const image = shortImageName(item.image || "");
-  return [state, image].filter(Boolean).join(" · ") || item.source;
+  const state = compactContainerStateText(item.state, item.health);
+  return [state, image].filter(Boolean).join(" · ");
+}
+
+function compactContainerStateText(stateValue?: string, healthValue?: string): string {
+  const state = String(stateValue || "").trim().toLowerCase();
+  const health = String(healthValue || "").trim().toLowerCase();
+  if (!state && !health) return "";
+  if ([state, health].every((value) => !value || ["running", "up", "healthy", "configured"].includes(value))) return "";
+  return [stateValue, healthValue].filter(Boolean).join(" / ");
 }
 
 function shortImageName(value: string): string {
@@ -4767,18 +4463,6 @@ function pipelineActivityMetaText(row: Pipeline, nowMs: number): string {
   return [age, duration].filter(Boolean).join(" · ") || pipelineDurationText(row, nowMs);
 }
 
-function lastPipelineByStatus(item: DeployObject, status: "success" | "failed"): Pipeline | undefined {
-  if (status === "success") return item.pipelines.find((row) => row.status === "success");
-  return item.pipelines.find((row) => ["failure", "error", "killed"].includes(row.status));
-}
-
-function pipelineDurationSeconds(row?: Pipeline): number {
-  if (!row) return 0;
-  if (row.started && row.finished) return row.finished - row.started;
-  if (row.created && row.finished) return row.finished - row.created;
-  return 0;
-}
-
 function pipelineStepTimeText(step: PipelineStep): string {
   if (step.started && step.finished) return `耗时 ${formatDuration(step.finished - step.started)}`;
   if (step.started) return `开始 ${formatUnixTime(step.started)}`;
@@ -4787,6 +4471,10 @@ function pipelineStepTimeText(step: PipelineStep): string {
 
 function pipelineSortTime(row: Pipeline): number {
   return Math.max(row.finished || 0, row.started || 0, row.created || 0);
+}
+
+function pipelineSortValue(row?: Pipeline): number {
+  return row ? pipelineSortTime(row) : 0;
 }
 
 function formatDuration(seconds: number): string {
@@ -4992,12 +4680,6 @@ function deploymentAttentionRank(row: DeploymentStatus): number {
   if (!row.current_commit && row.latest_status === "success" && row.deploy_verify_status) return 3;
   if (row.current_commit) return 3;
   return 4;
-}
-
-function deploymentCommitLine(row: DeploymentStatus): string {
-  if (!row.current_commit) return "-";
-  if (row.deploy_verified) return row.current_commit.slice(0, 8);
-  return `流水线 ${row.current_commit.slice(0, 8)}`;
 }
 
 function deployObjectEnvironmentLabel(row?: DeploymentStatus, task?: Task): string {
@@ -5363,51 +5045,6 @@ function taskVariableSummaryTags(task: Task): string[] {
   return tags;
 }
 
-function mobileDeploymentActions(
-  row: DeploymentStatus,
-  tasks: Task[],
-  currentUser: User,
-  triggeringTaskIDSet: Set<string>,
-  onRun: (task: Task) => void
-) {
-  const actions = deploymentActionsForStatus(row, tasks);
-  const out: ReactNode[] = [];
-  if (actions.deploy) {
-    out.push(
-      <Tooltip key="deploy" title={taskDisabledTitle(currentUser, actions.deploy)}>
-        <span>
-          <Button size="small" type="primary" loading={triggeringTaskIDSet.has(actions.deploy.id)} disabled={!canRunTask(currentUser, actions.deploy)} onClick={() => onRun(actions.deploy!)}>
-            部署
-          </Button>
-        </span>
-      </Tooltip>
-    );
-  }
-  if (actions.rollback) {
-    out.push(
-      <Tooltip key="rollback" title={taskDisabledTitle(currentUser, actions.rollback)}>
-        <span>
-          <Button size="small" danger loading={triggeringTaskIDSet.has(actions.rollback.id)} disabled={!canRunTask(currentUser, actions.rollback)} onClick={() => onRun(actions.rollback!)}>
-            回退
-          </Button>
-        </span>
-      </Tooltip>
-    );
-  }
-  if (actions.extras.length) {
-    out.push(
-      <DeploymentExtraActions
-        key="extras"
-        actions={actions.extras}
-        currentUser={currentUser}
-        triggeringTaskIDSet={triggeringTaskIDSet}
-        onRun={onRun}
-      />
-    );
-  }
-  return out;
-}
-
 function DeploymentExtraActions({
   actions,
   currentUser,
@@ -5447,6 +5084,7 @@ function monitoringSourceText(source: string): string {
   if (source === "beszel") return "Beszel";
   if (source === "ssh_fallback") return "SSH 兜底";
   if (source === "degraded") return "已降级";
+  if (source === "configured") return "已配置";
   return source || "未知";
 }
 
@@ -5454,13 +5092,14 @@ function monitoringSourceColor(source: string): string {
   if (source === "beszel") return "success";
   if (source === "ssh_fallback") return "gold";
   if (source === "degraded") return "error";
+  if (source === "configured") return "default";
   return "default";
 }
 
 function monitoringStatusColor(status: string): string {
   const value = String(status || "").toLowerCase();
   if (!value || value === "unknown") return "default";
-  if (["ok", "up", "online", "healthy", "active", "normal", "success"].includes(value)) return "success";
+  if (["ok", "up", "online", "healthy", "active", "normal", "success", "configured"].includes(value)) return "success";
   if (["warning", "degraded"].includes(value)) return "gold";
   return "error";
 }
@@ -5468,9 +5107,16 @@ function monitoringStatusColor(status: string): string {
 function monitoringHostStatusText(status: string): string {
   const value = String(status || "").toLowerCase();
   if (!value || value === "unknown") return "未知";
+  if (value === "configured") return "已配置";
   if (["ok", "up", "online", "healthy", "active", "normal", "success"].includes(value)) return "正常";
   if (["warning", "degraded"].includes(value)) return "提醒";
   return status;
+}
+
+function monitoringHostMeta(row: MonitoringHost): string {
+  const message = String(row.message || "").trim();
+  if (!message || message.toLowerCase() === "configured") return monitoringRoleText(row.role);
+  return `${monitoringRoleText(row.role)} · ${message}`;
 }
 
 function monitoringRoleText(role: string): string {

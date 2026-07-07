@@ -237,10 +237,6 @@ body {
   height: 100%;
 }
 
-.setup-status-head {
-  justify-content: flex-start;
-}
-
 .setup-form-card {
   margin-bottom: 14px;
 }
@@ -284,23 +280,6 @@ body {
 
 .setup-action-buttons {
   justify-content: flex-end;
-}
-
-.setup-action-footer {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 2px;
-}
-
-.command-block {
-  margin: 0 !important;
-  padding: 10px 12px;
-  color: #243027;
-  background: #f8faf7;
-  border: 1px solid #e2e8dd;
-  border-radius: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  white-space: pre-wrap;
 }
 
 .log-workspace {
@@ -633,10 +612,6 @@ body {
   margin-bottom: 2px !important;
 }
 
-.deployment-version-cell {
-  max-width: 270px;
-}
-
 .deploy-intro-actions {
   justify-content: flex-end;
 }
@@ -692,8 +667,16 @@ body {
 }
 
 .desktop-deploy-object-index-table .ant-table-tbody > tr > td {
-  height: 70px;
+  height: 78px;
   vertical-align: middle;
+}
+
+.deploy-object-project-cell {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
 }
 
 .deploy-object-name-link {
@@ -749,43 +732,6 @@ body {
   border-color: #94a3b8;
 }
 
-.deploy-weather {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-}
-
-.deploy-weather::before {
-  content: "";
-  width: 16px;
-  height: 16px;
-  background: #15b65d;
-  border-radius: 999px;
-  box-shadow: 0 0 0 4px rgba(21, 182, 93, 0.12);
-}
-
-.deploy-weather-warning::before {
-  background: #d89b00;
-  box-shadow: 0 0 0 4px rgba(216, 155, 0, 0.16);
-}
-
-.deploy-weather-danger::before {
-  background: #ef4444;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
-}
-
-.deploy-weather-link::before {
-  background: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.13);
-}
-
-.deploy-run-icon-button {
-  color: #16a34a;
-}
-
 .deploy-object-detail-shell {
   display: grid;
   gap: 12px;
@@ -807,8 +753,8 @@ body {
 
 .deploy-object-detail-layout {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
   align-items: start;
   min-width: 0;
 }
@@ -817,44 +763,6 @@ body {
   display: grid;
   gap: 14px;
   min-width: 0;
-}
-
-.deploy-object-side-menu {
-  display: grid;
-  gap: 4px;
-  padding: 0;
-}
-
-.deploy-object-side-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 38px;
-  padding: 8px 10px;
-  color: #1f2933;
-  text-align: left;
-  text-decoration: none;
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 650;
-}
-
-.deploy-object-side-item:hover,
-.deploy-object-side-item-active {
-  color: #285915;
-  background: #eef5eb;
-}
-
-.deploy-object-side-danger {
-  color: #c2410c;
-}
-
-.deploy-object-side-item:disabled {
-  color: #9ca3af;
-  cursor: not-allowed;
 }
 
 .deploy-build-card .ant-card-body {
@@ -945,21 +853,9 @@ body {
 
 .deploy-object-status-strip {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(150px, 1fr));
+  grid-template-columns: minmax(240px, 1.35fr) repeat(2, minmax(160px, 1fr));
   gap: 8px;
   min-width: 0;
-}
-
-.deploy-object-status-rail-normal {
-  background: #4f8b33;
-}
-
-.deploy-object-status-rail-warning {
-  background: #d99717;
-}
-
-.deploy-object-status-rail-danger {
-  background: #d14343;
 }
 
 .deploy-object-expanded-panel {
@@ -984,14 +880,6 @@ body {
   gap: 10px;
   min-width: 0;
 }
-
-.deploy-object-status-rail {
-  width: 4px;
-  height: 40px;
-  border-radius: 999px;
-  background: #9ca3af;
-}
-
 
 .deploy-object-version-grid {
   display: grid;
@@ -1018,19 +906,6 @@ body {
 
 .deploy-object-metric .ant-typography:last-child {
   min-width: 0;
-}
-
-.deploy-object-latest-pipeline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px 12px;
-  background: #fbfcfa;
-  border: 1px solid #e6ece2;
-  border-radius: 8px;
 }
 
 .deploy-verify-inline {
@@ -1086,20 +961,17 @@ body {
   white-space: nowrap;
 }
 
-.desktop-deployment-table .ant-table-cell,
 .desktop-task-table .ant-table-cell,
 .desktop-pipeline-table .ant-table-cell {
   min-width: 0;
   vertical-align: top;
 }
 
-.desktop-deployment-table .ant-table,
 .desktop-task-table .ant-table,
 .desktop-pipeline-table .ant-table {
   table-layout: fixed !important;
 }
 
-.desktop-deployment-table .ant-typography,
 .desktop-task-table .ant-typography,
 .desktop-pipeline-table .ant-typography {
   max-width: 100%;
@@ -1115,7 +987,6 @@ body {
   max-width: 100%;
 }
 
-.desktop-deployment-table .ant-table-thead > tr > th,
 .desktop-task-table .ant-table-thead > tr > th,
 .desktop-pipeline-table .ant-table-thead > tr > th,
 .desktop-monitor-system-table .ant-table-thead > tr > th,
@@ -1258,8 +1129,41 @@ body {
   line-height: 1.7;
 }
 
-.run-context {
-  margin: 12px 0 4px;
+.run-confirm-stack .ant-form-item {
+  margin-bottom: 0;
+}
+
+.run-context-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.run-context-metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  min-height: 64px;
+  padding: 9px 10px;
+  background: #fbfcfa;
+  border: 1px solid #e2e8dd;
+  border-radius: 8px;
+}
+
+.run-context-metric-accent {
+  background: #f4f9f1;
+  border-color: #cfe4c5;
+}
+
+.run-queue-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  background: #fffaf0;
+  border: 1px solid #f4ddb2;
+  border-radius: 8px;
 }
 
 .task-detail-panel {
@@ -1280,10 +1184,6 @@ body {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.run-queue-alert {
-  margin: 12px 0;
 }
 
 .monitoring-alert-inline {
@@ -1579,6 +1479,14 @@ body {
   margin-top: 16px;
 }
 
+.config-task-summary {
+  margin-bottom: 12px;
+  padding: 9px 10px;
+  background: #fbfcfa;
+  border: 1px solid #e2e8dd;
+  border-radius: 8px;
+}
+
 .settings-mobile-nav-card {
   display: none;
 }
@@ -1593,7 +1501,6 @@ body {
 }
 
 .mobile-task-list,
-.mobile-deployment-list,
 .mobile-pipeline-list,
 .mobile-infra-list,
 .mobile-monitor-system-list,
@@ -1769,15 +1676,13 @@ body {
 }
 
 .setup-readiness-card,
-.setup-summary-card,
-.setup-checklist-card {
+.setup-summary-card {
   height: 100%;
   border-radius: 8px;
 }
 
 .setup-readiness-card .ant-card-body,
-.setup-summary-card .ant-card-body,
-.setup-checklist-card .ant-card-body {
+.setup-summary-card .ant-card-body {
   height: 100%;
 }
 
@@ -1800,6 +1705,19 @@ body {
   color: #5f6f55;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.setup-focus-card {
+  border-radius: 8px;
+}
+
+.setup-focus-card .ant-card-body {
+  padding-top: 6px !important;
+}
+
+.setup-focus-list .ant-list-item {
+  align-items: flex-start;
+  padding: 10px 0;
 }
 
 .setup-form-card .ant-pro-card-title {
@@ -1923,30 +1841,43 @@ body {
     order: 1;
   }
 
-  .deploy-object-side-menu {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .deploy-object-side-item {
-    justify-content: center;
-  }
-
   .deploy-object-detail-head {
     align-items: stretch;
     flex-direction: column;
   }
 
   .deploy-object-status-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .mobile-deploy-object-list {
     display: block;
   }
 
+  .mobile-deploy-object-list .ant-list-items {
+    display: grid;
+    gap: 10px;
+  }
+
   .mobile-deploy-object-list .ant-list-item {
     display: block;
-    padding: 12px 0;
+    min-width: 0;
+    padding: 13px 12px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+  }
+
+  .mobile-deploy-object-list .ant-list-item-meta {
+    min-width: 0;
+  }
+
+  .mobile-deploy-object-list .ant-list-item-meta-title {
+    margin-bottom: 8px !important;
+  }
+
+  .mobile-deploy-object-list .ant-list-item-meta-description {
+    min-width: 0;
   }
 
   .deploy-object-version-grid {
@@ -1971,7 +1902,6 @@ body {
   }
 
   .desktop-task-table,
-  .desktop-deployment-table,
   .desktop-pipeline-table,
   .desktop-infra-table,
   .desktop-monitor-system-table,
@@ -1980,7 +1910,6 @@ body {
   }
 
   .mobile-task-list,
-  .mobile-deployment-list,
   .mobile-pipeline-list,
   .mobile-infra-list,
   .mobile-monitor-system-list,
@@ -1989,7 +1918,6 @@ body {
   }
 
   .mobile-task-list .ant-list-items,
-  .mobile-deployment-list .ant-list-items,
   .mobile-pipeline-list .ant-list-items,
   .mobile-infra-list .ant-list-items,
   .mobile-monitor-system-list .ant-list-items,
@@ -1999,7 +1927,6 @@ body {
   }
 
   .mobile-task-list .ant-list-item,
-  .mobile-deployment-list .ant-list-item,
   .mobile-pipeline-list .ant-list-item,
   .mobile-infra-list .ant-list-item,
   .mobile-monitor-system-list .ant-list-item,
@@ -2013,7 +1940,6 @@ body {
   }
 
   .mobile-task-list .ant-list-item-action,
-  .mobile-deployment-list .ant-list-item-action,
   .mobile-pipeline-list .ant-list-item-action,
   .mobile-infra-list .ant-list-item-action,
   .mobile-monitor-container-list .ant-list-item-action {
@@ -2025,7 +1951,6 @@ body {
   }
 
   .mobile-task-list .ant-list-item-meta,
-  .mobile-deployment-list .ant-list-item-meta,
   .mobile-pipeline-list .ant-list-item-meta,
   .mobile-infra-list .ant-list-item-meta,
   .mobile-monitor-system-list .ant-list-item-meta,
@@ -2035,7 +1960,6 @@ body {
   }
 
   .mobile-task-list .ant-list-item-meta-title,
-  .mobile-deployment-list .ant-list-item-meta-title,
   .mobile-pipeline-list .ant-list-item-meta-title,
   .mobile-infra-list .ant-list-item-meta-title,
   .mobile-monitor-system-list .ant-list-item-meta-title,
@@ -2044,7 +1968,6 @@ body {
   }
 
   .mobile-task-list .ant-list-item-meta-description,
-  .mobile-deployment-list .ant-list-item-meta-description,
   .mobile-pipeline-list .ant-list-item-meta-description,
   .mobile-infra-list .ant-list-item-meta-description,
   .mobile-monitor-system-list .ant-list-item-meta-description,
@@ -2053,7 +1976,6 @@ body {
   }
 
   .mobile-task-list .ant-list-item-action > li,
-  .mobile-deployment-list .ant-list-item-action > li,
   .mobile-pipeline-list .ant-list-item-action > li,
   .mobile-infra-list .ant-list-item-action > li,
   .mobile-monitor-container-list .ant-list-item-action > li {
@@ -2133,9 +2055,7 @@ body {
   }
 
   .page-intro-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
+    display: none;
   }
 
   .page-intro-stat {
@@ -2148,6 +2068,10 @@ body {
 
   .page-intro-actions .ant-btn {
     width: 100%;
+  }
+
+  .run-context-strip {
+    grid-template-columns: 1fr;
   }
 
   .settings-tabs > .ant-tabs-nav {
@@ -2359,12 +2283,10 @@ body {
     padding: 14px !important;
   }
 
-  .mobile-deployment-list .ant-list-item,
   .mobile-pipeline-list .ant-list-item {
     display: block;
   }
 
-  .mobile-deployment-list .ant-list-item-action,
   .mobile-pipeline-list .ant-list-item-action {
     margin: 10px 0 0;
   }

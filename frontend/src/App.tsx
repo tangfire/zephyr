@@ -20,6 +20,7 @@ import {
   Typography,
   theme
 } from "antd";
+import zhCN from "antd/locale/zh_CN";
 import { LogOut, Menu as MenuIcon, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, errorText, isUnauthorized } from "./api";
@@ -67,6 +68,7 @@ const { Text, Title } = Typography;
 export function App() {
   return (
     <ConfigProvider
+      locale={zhCN}
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
@@ -672,51 +674,52 @@ function Shell({ page }: { page: "home" | "docs" }) {
       >
         <Form form={runForm} layout="vertical" onFinish={executeTask}>
           {runTask && (
-            <>
-            <Alert type={runTask.risk === "danger" ? "error" : runTask.risk === "warning" ? "warning" : "info"} showIcon message={runTask.description} />
-            <TaskRunContext task={runTask} statuses={deploymentStatuses} nowMs={nowMs} />
-            {activePipelines.length > 0 && (
-              <Alert
-                className="run-queue-alert"
-                type="warning"
-                showIcon
-                message={`当前有 ${activePipelines.length} 条流水线运行或排队`}
-                description={`Woodpecker 已按单并发执行，本次触发会进入队列，不会和 ${activePipelines[0].repo_name || `Repo ${activePipelines[0].repo_id}`} #${activePipelines[0].number} 同时构建。`}
-              />
-            )}
-            <Form.Item
-              label="本次执行分支"
-              name="branch"
-              extra={`默认配置：${runTask.branch || "main"}`}
-              rules={[{ required: true, message: "请选择分支" }]}
-            >
-              <Select
-                showSearch
-                optionFilterProp="label"
-                options={branchOptionsForTask(state, runTask)}
-                placeholder="选择本次部署分支"
-              />
-            </Form.Item>
-            {(runTask.inputs || []).map((item) => (
+            <Space direction="vertical" size={12} className="side-stack run-confirm-stack">
+              {runTask.description && (
+                <Alert type={runTask.risk === "danger" ? "error" : runTask.risk === "warning" ? "warning" : "info"} showIcon message={runTask.description} />
+              )}
+              <TaskRunContext task={runTask} statuses={deploymentStatuses} nowMs={nowMs} />
+              {activePipelines.length > 0 && (
+                <div className="run-queue-strip">
+                  <Tag color="gold">队列 {activePipelines.length}</Tag>
+                  <Text type="secondary" ellipsis={{ tooltip: `${activePipelines[0].repo_name || `Repo ${activePipelines[0].repo_id}`} #${activePipelines[0].number}` }}>
+                    前方：{activePipelines[0].repo_name || `Repo ${activePipelines[0].repo_id}`} #{activePipelines[0].number}
+                  </Text>
+                </div>
+              )}
               <Form.Item
-                key={item.name}
-                label={item.label}
-                name={item.name}
-                rules={item.required ? [{ required: true, message: `请输入${item.label}` }] : undefined}
+                label="本次执行分支"
+                name="branch"
+                extra={`默认配置：${runTask.branch || "main"}`}
+                rules={[{ required: true, message: "请选择分支" }]}
               >
-                <Input placeholder={item.placeholder} />
+                <Select
+                  showSearch
+                  optionFilterProp="label"
+                  options={branchOptionsForTask(state, runTask)}
+                  placeholder="选择本次部署分支"
+                />
               </Form.Item>
-            ))}
-            {runTask.confirm_text && (
-              <Form.Item
-                label={`输入 ${runTask.confirm_text} 确认`}
-                name="confirm_text"
-                rules={[{ required: true, message: "请输入确认文字" }]}
-            >
-              <Input />
-            </Form.Item>
-          )}
-            </>
+              {(runTask.inputs || []).map((item) => (
+                <Form.Item
+                  key={item.name}
+                  label={item.label}
+                  name={item.name}
+                  rules={item.required ? [{ required: true, message: `请输入${item.label}` }] : undefined}
+                >
+                  <Input placeholder={item.placeholder} />
+                </Form.Item>
+              ))}
+              {runTask.confirm_text && (
+                <Form.Item
+                  label={`输入 ${runTask.confirm_text} 确认`}
+                  name="confirm_text"
+                  rules={[{ required: true, message: "请输入确认文字" }]}
+                >
+                  <Input />
+                </Form.Item>
+              )}
+            </Space>
           )}
         </Form>
       </Modal>
