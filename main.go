@@ -59,6 +59,10 @@ type Config struct {
 	BeszelPassword        string
 	DozzlePublicURL       string
 	GrafanaPublicURL      string
+	LogStrategy           string
+	DockerLogMaxSize      string
+	DockerLogMaxFile      string
+	AlertWebhookURL       string
 	ExternalLinksJSON     string
 	MonitorHostsJSON      string
 	MonitorSSHKeyPath     string
@@ -82,6 +86,10 @@ type RuntimeConfigFile struct {
 	BeszelPassword        string               `json:"beszel_password,omitempty"`
 	DozzlePublicURL       string               `json:"dozzle_public_url,omitempty"`
 	GrafanaPublicURL      string               `json:"grafana_public_url,omitempty"`
+	LogStrategy           string               `json:"log_strategy,omitempty"`
+	DockerLogMaxSize      string               `json:"docker_log_max_size,omitempty"`
+	DockerLogMaxFile      string               `json:"docker_log_max_file,omitempty"`
+	AlertWebhookURL       string               `json:"alert_webhook_url,omitempty"`
 	ExternalLinks         []ExternalLinkConfig `json:"external_links"`
 	MonitorHosts          []MonitorHostConfig  `json:"monitor_hosts"`
 	MonitorRefreshSeconds int                  `json:"monitor_refresh_seconds,omitempty"`
@@ -101,6 +109,10 @@ type RuntimeConfigInput struct {
 	BeszelPassword        string               `json:"beszel_password"`
 	DozzlePublicURL       string               `json:"dozzle_public_url"`
 	GrafanaPublicURL      string               `json:"grafana_public_url"`
+	LogStrategy           string               `json:"log_strategy"`
+	DockerLogMaxSize      string               `json:"docker_log_max_size"`
+	DockerLogMaxFile      string               `json:"docker_log_max_file"`
+	AlertWebhookURL       string               `json:"alert_webhook_url"`
 	ExternalLinks         []ExternalLinkConfig `json:"external_links"`
 	MonitorHosts          []MonitorHostConfig  `json:"monitor_hosts"`
 	MonitorRefreshSeconds int                  `json:"monitor_refresh_seconds"`
@@ -110,12 +122,16 @@ type RuntimeConfigInput struct {
 }
 
 type SetupConfigResponse struct {
-	Config    RuntimeConfigInput `json:"config"`
-	Secrets   map[string]bool    `json:"secrets"`
-	Status    []SetupStatusItem  `json:"status"`
-	Commands  []SetupCommand     `json:"commands"`
-	Docs      []SetupDocLink     `json:"docs"`
-	UpdatedAt string             `json:"updated_at"`
+	Config                        RuntimeConfigInput            `json:"config"`
+	Secrets                       map[string]bool               `json:"secrets"`
+	Readiness                     string                        `json:"readiness"`
+	Status                        []SetupStatusItem             `json:"status"`
+	Checklist                     []SetupChecklistItem          `json:"checklist"`
+	DeploymentVerificationSummary DeploymentVerificationSummary `json:"deployment_verification_summary"`
+	LogStrategy                   LogStrategyStatus             `json:"log_strategy"`
+	Commands                      []SetupCommand                `json:"commands"`
+	Docs                          []SetupDocLink                `json:"docs"`
+	UpdatedAt                     string                        `json:"updated_at"`
 }
 
 type SetupStatusItem struct {
@@ -125,6 +141,36 @@ type SetupStatusItem struct {
 	Message     string `json:"message"`
 	ActionLabel string `json:"action_label,omitempty"`
 	ActionURL   string `json:"action_url,omitempty"`
+}
+
+type SetupChecklistItem struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	Severity    string `json:"severity"`
+	Message     string `json:"message"`
+	Fix         string `json:"fix,omitempty"`
+	ActionLabel string `json:"action_label,omitempty"`
+	ActionURL   string `json:"action_url,omitempty"`
+}
+
+type DeploymentVerificationSummary struct {
+	TaskCount       int      `json:"task_count"`
+	ConfiguredCount int      `json:"configured_count"`
+	MissingCount    int      `json:"missing_count"`
+	MissingTasks    []string `json:"missing_tasks"`
+}
+
+type LogStrategyStatus struct {
+	Mode              string `json:"mode"`
+	Label             string `json:"label"`
+	Message           string `json:"message"`
+	DozzlePublicURL   string `json:"dozzle_public_url,omitempty"`
+	GrafanaPublicURL  string `json:"grafana_public_url,omitempty"`
+	DockerLogMaxSize  string `json:"docker_log_max_size"`
+	DockerLogMaxFile  string `json:"docker_log_max_file"`
+	DockerRetention   string `json:"docker_retention"`
+	AlertWebhookReady bool   `json:"alert_webhook_ready"`
 }
 
 type SetupCommand struct {
@@ -141,23 +187,24 @@ type SetupDocLink struct {
 }
 
 type Task struct {
-	ID           string            `json:"id"`
-	Group        string            `json:"group"`
-	Title        string            `json:"title"`
-	Description  string            `json:"description"`
-	RepoID       int               `json:"repo_id"`
-	RepoName     string            `json:"repo_name,omitempty"`
-	Branch       string            `json:"branch"`
-	Variables    map[string]string `json:"variables"`
-	Risk         string            `json:"risk"`
-	ConfirmText  string            `json:"confirm_text,omitempty"`
-	AllowedRoles []string          `json:"allowed_roles,omitempty"`
-	Inputs       []TaskInput       `json:"inputs,omitempty"`
-	Disabled     bool              `json:"disabled,omitempty"`
-	ExternalURL  string            `json:"external_url,omitempty"`
-	Custom       bool              `json:"custom,omitempty"`
-	Builtin      bool              `json:"builtin,omitempty"`
-	Overridden   bool              `json:"overridden,omitempty"`
+	ID             string            `json:"id"`
+	Group          string            `json:"group"`
+	Title          string            `json:"title"`
+	Description    string            `json:"description"`
+	RepoID         int               `json:"repo_id"`
+	RepoName       string            `json:"repo_name,omitempty"`
+	Branch         string            `json:"branch"`
+	Variables      map[string]string `json:"variables"`
+	Risk           string            `json:"risk"`
+	ConfirmText    string            `json:"confirm_text,omitempty"`
+	AllowedRoles   []string          `json:"allowed_roles,omitempty"`
+	Inputs         []TaskInput       `json:"inputs,omitempty"`
+	Disabled       bool              `json:"disabled,omitempty"`
+	DisabledReason string            `json:"disabled_reason,omitempty"`
+	ExternalURL    string            `json:"external_url,omitempty"`
+	Custom         bool              `json:"custom,omitempty"`
+	Builtin        bool              `json:"builtin,omitempty"`
+	Overridden     bool              `json:"overridden,omitempty"`
 }
 
 type TaskInput struct {
@@ -457,6 +504,10 @@ func loadConfig() Config {
 		BeszelPassword:        envCompat("ZEPHYR_BESZEL_PASSWORD", "ZEFIRE_BESZEL_PASSWORD", ""),
 		DozzlePublicURL:       strings.TrimRight(firstNonEmptyString(envCompat("ZEPHYR_DOZZLE_PUBLIC_URL", "ZEFIRE_DOZZLE_PUBLIC_URL", ""), env("DOZZLE_PUBLIC_URL", "")), "/"),
 		GrafanaPublicURL:      strings.TrimRight(envCompat("ZEPHYR_GRAFANA_PUBLIC_URL", "ZEFIRE_GRAFANA_PUBLIC_URL", ""), "/"),
+		LogStrategy:           normalizeLogStrategy(envCompat("ZEPHYR_LOG_STRATEGY", "ZEFIRE_LOG_STRATEGY", "lightweight")),
+		DockerLogMaxSize:      fallbackText(env("DOCKER_LOG_MAX_SIZE", ""), "20m"),
+		DockerLogMaxFile:      fallbackText(env("DOCKER_LOG_MAX_FILE", ""), "3"),
+		AlertWebhookURL:       envCompat("ZEPHYR_ALERT_WEBHOOK_URL", "ZEFIRE_ALERT_WEBHOOK_URL", ""),
 		ExternalLinksJSON:     envCompat("ZEPHYR_LINKS_JSON", "ZEFIRE_LINKS_JSON", ""),
 		MonitorHostsJSON:      envCompat("ZEPHYR_MONITOR_HOSTS_JSON", "ZEFIRE_MONITOR_HOSTS_JSON", ""),
 		MonitorSSHKeyPath:     envCompat("ZEPHYR_MONITOR_SSH_KEY_PATH", "ZEFIRE_MONITOR_SSH_KEY_PATH", "/data/ssh/monitor_ed25519"),
@@ -532,6 +583,18 @@ func applyRuntimeConfig(cfg *Config, runtime RuntimeConfigFile) {
 	}
 	cfg.GrafanaPublicURL = cleanURL(runtime.GrafanaPublicURL)
 	cfg.DozzlePublicURL = cleanURL(runtime.DozzlePublicURL)
+	if value := normalizeLogStrategy(runtime.LogStrategy); value != "" {
+		cfg.LogStrategy = value
+	}
+	if value := strings.TrimSpace(runtime.DockerLogMaxSize); value != "" {
+		cfg.DockerLogMaxSize = value
+	}
+	if value := strings.TrimSpace(runtime.DockerLogMaxFile); value != "" {
+		cfg.DockerLogMaxFile = value
+	}
+	if value := strings.TrimSpace(runtime.AlertWebhookURL); value != "" {
+		cfg.AlertWebhookURL = value
+	}
 	if runtime.ExternalLinks != nil {
 		cfg.ExternalLinksJSON = mustMarshalString(normalizeExternalLinks(runtime.ExternalLinks))
 	}
@@ -562,6 +625,9 @@ func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing R
 		BeszelEmail:           strings.TrimSpace(input.BeszelEmail),
 		DozzlePublicURL:       cleanURL(input.DozzlePublicURL),
 		GrafanaPublicURL:      cleanURL(input.GrafanaPublicURL),
+		LogStrategy:           normalizeLogStrategy(input.LogStrategy),
+		DockerLogMaxSize:      strings.TrimSpace(input.DockerLogMaxSize),
+		DockerLogMaxFile:      strings.TrimSpace(input.DockerLogMaxFile),
 		ExternalLinks:         normalizeExternalLinks(input.ExternalLinks),
 		MonitorHosts:          normalizeMonitorHosts(input.MonitorHosts, current.MonitorSSHKeyPath),
 		MonitorRefreshSeconds: clampInt(input.MonitorRefreshSeconds, 5, 300, current.MonitorRefreshSeconds),
@@ -577,6 +643,10 @@ func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing R
 	if cfg.BeszelPassword == "" {
 		cfg.BeszelPassword = existing.BeszelPassword
 	}
+	cfg.AlertWebhookURL = strings.TrimSpace(input.AlertWebhookURL)
+	if cfg.AlertWebhookURL == "" {
+		cfg.AlertWebhookURL = existing.AlertWebhookURL
+	}
 	if cfg.PublicURL == "" {
 		cfg.PublicURL = current.PublicURL
 	}
@@ -591,6 +661,18 @@ func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing R
 	}
 	if cfg.BeszelPublicURL == "" {
 		cfg.BeszelPublicURL = current.BeszelPublicURL
+	}
+	if cfg.LogStrategy == "" {
+		cfg.LogStrategy = current.LogStrategy
+	}
+	if cfg.LogStrategy == "" {
+		cfg.LogStrategy = "lightweight"
+	}
+	if cfg.DockerLogMaxSize == "" {
+		cfg.DockerLogMaxSize = fallbackText(current.DockerLogMaxSize, "20m")
+	}
+	if cfg.DockerLogMaxFile == "" {
+		cfg.DockerLogMaxFile = fallbackText(current.DockerLogMaxFile, "3")
 	}
 	return cfg
 }
@@ -610,6 +692,19 @@ func clampInt(value int, minValue int, maxValue int, fallback int) int {
 		return maxValue
 	}
 	return value
+}
+
+func normalizeLogStrategy(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "light", "dozzle", "lightweight":
+		return "lightweight"
+	case "full", "grafana", "loki", "observability":
+		return "observability"
+	case "external", "third-party", "third_party":
+		return "external"
+	default:
+		return ""
+	}
 }
 
 func mustMarshalString(value any) string {
@@ -1171,6 +1266,9 @@ func (a *App) setupConfig(w http.ResponseWriter, r *http.Request) {
 				"ZEPHYR_BESZEL_PUBLIC_URL":  next.BeszelPublicURL,
 				"ZEPHYR_DOZZLE_PUBLIC_URL":  next.DozzlePublicURL,
 				"ZEPHYR_GRAFANA_PUBLIC_URL": next.GrafanaPublicURL,
+				"ZEPHYR_LOG_STRATEGY":       next.LogStrategy,
+				"DOCKER_LOG_MAX_SIZE":       next.DockerLogMaxSize,
+				"DOCKER_LOG_MAX_FILE":       next.DockerLogMaxFile,
 			},
 			Status: "ok",
 		})
@@ -2382,6 +2480,8 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 		}
 	}
 
+	verifiedByTarget := map[string][]DeploymentStatus{}
+	unverifiedByTarget := map[string][]DeploymentStatus{}
 	for repoID, rows := range pipelines {
 		repoName := repos[repoID]
 		for _, pipeline := range rows {
@@ -2413,38 +2513,66 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 				status.LatestPipeline = pipeline.Number
 				status.LatestTriggeredBy = pipelineActor(pipeline)
 			}
-			if pipeline.Status == "success" && isNewerDeployment(pipeline, *status) {
-				if status.Pipeline > 0 && status.Pipeline != pipeline.Number {
-					status.PreviousAction = status.LastAction
-					status.PreviousBranch = status.CurrentBranch
-					status.PreviousCommit = status.CurrentCommit
-					status.PreviousDeployedAt = status.LastDeployedAt
-					status.PreviousPipeline = status.Pipeline
+			if pipeline.Status == "success" {
+				candidate := deploymentStatusFromPipeline(target, repoID, repoName, configuredBranch, pipeline)
+				applyDeploymentVerification(&candidate, verifyConfigs[target.ID])
+				if candidate.DeployVerified {
+					verifiedByTarget[target.ID] = append(verifiedByTarget[target.ID], candidate)
+				} else {
+					unverifiedByTarget[target.ID] = append(unverifiedByTarget[target.ID], candidate)
 				}
-				status.CurrentBranch = fallbackText(pipeline.Branch, "-")
-				status.CurrentCommit = pipeline.Commit
-				status.LastAction = deploymentActionText(repoID, repoName, pipeline)
-				status.LastStatus = pipeline.Status
-				status.LastDeployedAt = pipelineFinishedAt(pipeline)
-				status.Pipeline = pipeline.Number
-				status.TriggeredBy = pipelineActor(pipeline)
-				status.TriggeredAt = pipeline.ZefireTriggeredAt
-				status.Variables = sanitizeVariables(pipeline.Variables)
-				if status.ConfiguredBranch == "" {
-					status.ConfiguredBranch = fallbackText(configuredBranch, fallbackText(pipeline.Branch, "main"))
-				}
-			} else if pipeline.Status == "success" && pipelineFinishedAt(pipeline) >= status.PreviousDeployedAt && pipeline.Number != status.Pipeline {
-				status.PreviousAction = deploymentActionText(repoID, repoName, pipeline)
-				status.PreviousBranch = fallbackText(pipeline.Branch, "-")
-				status.PreviousCommit = pipeline.Commit
-				status.PreviousDeployedAt = pipelineFinishedAt(pipeline)
-				status.PreviousPipeline = pipeline.Number
 			}
 		}
 	}
 
 	for id, status := range targets {
-		applyDeploymentVerification(status, verifyConfigs[id])
+		verified := verifiedByTarget[id]
+		sort.SliceStable(verified, func(i, j int) bool {
+			return verified[i].LastDeployedAt > verified[j].LastDeployedAt
+		})
+		if len(verified) > 0 {
+			current := verified[0]
+			status.CurrentBranch = current.CurrentBranch
+			status.CurrentCommit = current.CurrentCommit
+			status.LastAction = current.LastAction
+			status.LastStatus = current.LastStatus
+			status.LastDeployedAt = current.LastDeployedAt
+			status.Pipeline = current.Pipeline
+			status.TriggeredBy = current.TriggeredBy
+			status.TriggeredAt = current.TriggeredAt
+			status.Variables = current.Variables
+			status.ActualCommit = current.ActualCommit
+			status.HealthURL = current.HealthURL
+			status.DeployVerified = current.DeployVerified
+			status.DeployVerifyStatus = current.DeployVerifyStatus
+			status.DeployVerifyMessage = current.DeployVerifyMessage
+			if status.ConfiguredBranch == "" {
+				status.ConfiguredBranch = current.ConfiguredBranch
+			}
+		}
+		if len(verified) > 1 {
+			previous := verified[1]
+			status.PreviousAction = previous.LastAction
+			status.PreviousBranch = previous.CurrentBranch
+			status.PreviousCommit = previous.CurrentCommit
+			status.PreviousDeployedAt = previous.LastDeployedAt
+			status.PreviousPipeline = previous.Pipeline
+		}
+		if status.CurrentCommit == "" {
+			unverified := unverifiedByTarget[id]
+			sort.SliceStable(unverified, func(i, j int) bool {
+				return unverified[i].LastDeployedAt > unverified[j].LastDeployedAt
+			})
+			if len(unverified) > 0 {
+				status.DeployVerified = false
+				status.DeployVerifyStatus = unverified[0].DeployVerifyStatus
+				status.DeployVerifyMessage = unverified[0].DeployVerifyMessage
+				status.ActualCommit = unverified[0].ActualCommit
+				status.HealthURL = unverified[0].HealthURL
+			} else {
+				applyDeploymentVerification(status, verifyConfigs[id])
+			}
+		}
 	}
 
 	result := make([]DeploymentStatus, 0, len(order))
@@ -2458,6 +2586,26 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 		return groupSortKey(result[i].Group) < groupSortKey(result[j].Group)
 	})
 	return result
+}
+
+func deploymentStatusFromPipeline(target deploymentTarget, repoID int, repoName string, configuredBranch string, pipeline Pipeline) DeploymentStatus {
+	return DeploymentStatus{
+		ID:               target.ID,
+		Name:             target.Name,
+		Group:            target.Group,
+		RepoID:           repoID,
+		RepoName:         repoName,
+		ConfiguredBranch: fallbackText(configuredBranch, fallbackText(pipeline.Branch, "main")),
+		CurrentBranch:    fallbackText(pipeline.Branch, "-"),
+		CurrentCommit:    pipeline.Commit,
+		LastAction:       deploymentActionText(repoID, repoName, pipeline),
+		LastStatus:       pipeline.Status,
+		LastDeployedAt:   pipelineFinishedAt(pipeline),
+		Pipeline:         pipeline.Number,
+		TriggeredBy:      pipelineActor(pipeline),
+		TriggeredAt:      pipeline.ZefireTriggeredAt,
+		Variables:        sanitizeVariables(pipeline.Variables),
+	}
 }
 
 func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline, taskByID map[string]Task, tasks []Task) (deploymentTarget, string, bool) {
@@ -2699,7 +2847,7 @@ func applyDeploymentVerification(status *DeploymentStatus, cfg deploymentVerifyC
 	if !cfg.hasChecks() {
 		status.DeployVerified = false
 		status.DeployVerifyStatus = "pipeline_only"
-		status.DeployVerifyMessage = "仅确认 Woodpecker 流水线成功，尚未配置服务健康或版本落地校验"
+		status.DeployVerifyMessage = "构建成功，部署未验证：尚未配置服务健康或版本落地校验"
 		return
 	}
 
@@ -2758,7 +2906,7 @@ func applyDeploymentVerification(status *DeploymentStatus, cfg deploymentVerifyC
 	default:
 		status.DeployVerified = false
 		status.DeployVerifyStatus = "pipeline_only"
-		status.DeployVerifyMessage = "仅确认 Woodpecker 流水线成功"
+		status.DeployVerifyMessage = "构建成功，部署未验证"
 	}
 }
 
@@ -2938,6 +3086,10 @@ func (a *App) setupConfigResponse(now time.Time) SetupConfigResponse {
 		BeszelPassword:        "",
 		DozzlePublicURL:       a.cfg.DozzlePublicURL,
 		GrafanaPublicURL:      a.cfg.GrafanaPublicURL,
+		LogStrategy:           normalizeLogStrategy(a.cfg.LogStrategy),
+		DockerLogMaxSize:      fallbackText(a.cfg.DockerLogMaxSize, "20m"),
+		DockerLogMaxFile:      fallbackText(a.cfg.DockerLogMaxFile, "3"),
+		AlertWebhookURL:       "",
 		ExternalLinks:         a.extraExternalLinks(),
 		MonitorHosts:          hosts,
 		MonitorRefreshSeconds: a.cfg.MonitorRefreshSeconds,
@@ -2945,6 +3097,9 @@ func (a *App) setupConfigResponse(now time.Time) SetupConfigResponse {
 		MonitorCritDisk:       a.cfg.MonitorCritDisk,
 		MonitorWarnMemory:     a.cfg.MonitorWarnMemory,
 	}
+	verification := deploymentVerificationSummary(a.configuredTasks())
+	logStrategy := a.logStrategyStatus()
+	checklist := a.setupChecklist(hosts, verification, logStrategy)
 	return SetupConfigResponse{
 		Config: config,
 		Secrets: map[string]bool{
@@ -2952,11 +3107,16 @@ func (a *App) setupConfigResponse(now time.Time) SetupConfigResponse {
 			"beszel_password":  strings.TrimSpace(a.cfg.BeszelPassword) != "",
 			"session_secret":   strings.TrimSpace(a.cfg.SessionSecret) != "",
 			"database_dsn":     strings.TrimSpace(a.cfg.DBDSN) != "",
+			"alert_webhook":    strings.TrimSpace(a.cfg.AlertWebhookURL) != "",
 		},
-		Status:    a.setupStatus(hosts),
-		Commands:  a.setupCommands(hosts),
-		Docs:      setupDocLinks(),
-		UpdatedAt: now.Format(time.RFC3339),
+		Readiness:                     setupReadiness(checklist),
+		Status:                        a.setupStatus(hosts),
+		Checklist:                     checklist,
+		DeploymentVerificationSummary: verification,
+		LogStrategy:                   logStrategy,
+		Commands:                      a.setupCommands(hosts),
+		Docs:                          setupDocLinks(),
+		UpdatedAt:                     now.Format(time.RFC3339),
 	}
 }
 
@@ -3025,6 +3185,229 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 	return items
 }
 
+func (a *App) setupChecklist(hosts []MonitorHostConfig, verification DeploymentVerificationSummary, logStrategy LogStrategyStatus) []SetupChecklistItem {
+	items := []SetupChecklistItem{}
+	add := func(item SetupChecklistItem) {
+		if item.Severity == "" {
+			item.Severity = item.Status
+		}
+		items = append(items, item)
+	}
+	add(a.urlChecklistItem("peapod-url", "Peapod 公开地址", a.cfg.PublicURL, true, "配置 ZEPHYR_PUBLIC_URL，并确认反向代理可访问。"))
+	add(a.urlChecklistItem("woodpecker-url", "Woodpecker 公开入口", a.cfg.WoodpeckerPublicURL, true, "配置 WOODPECKER_PUBLIC_URL，并确认 ci 域名反代到 Woodpecker。"))
+	add(SetupChecklistItem{
+		ID:          "woodpecker-token",
+		Title:       "Woodpecker API token",
+		Status:      ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "ok", "error"),
+		Severity:    ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "ok", "error"),
+		Message:     ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "已配置，Peapod 可以触发流水线。", "未配置，Peapod 无法触发或取消流水线。"),
+		Fix:         "在 Woodpecker 创建用户 token 后填入配置中心。",
+		ActionLabel: "打开 Woodpecker",
+		ActionURL:   a.cfg.WoodpeckerPublicURL,
+	})
+	add(SetupChecklistItem{
+		ID:          "woodpecker-oauth",
+		Title:       "GitHub OAuth / 仓库 Trusted",
+		Status:      "unknown",
+		Severity:    "warning",
+		Message:     "Woodpecker 的 GitHub OAuth、仓库启用和 Trusted 权限需要在 Woodpecker 内确认。",
+		Fix:         "进入 Woodpecker，确认仓库已启用；部署类仓库需要 Trusted/Secrets/Volumes 权限。",
+		ActionLabel: "去确认",
+		ActionURL:   a.cfg.WoodpeckerPublicURL,
+	})
+	add(a.urlChecklistItem("beszel-url", "Beszel 资源监控", a.cfg.BeszelPublicURL, len(hosts) > 0, "配置 Beszel 公开入口，或保留 SSH 只读兜底。"))
+	add(a.urlChecklistItem("dozzle-url", "Dozzle 轻量日志", a.cfg.DozzlePublicURL, logStrategy.Mode == "lightweight", "轻量日志模式需要配置 Dozzle 入口。"))
+	add(a.urlChecklistItem("grafana-url", "Grafana / Loki 完整观测", a.cfg.GrafanaPublicURL, logStrategy.Mode == "observability", "完整观测模式需要配置 Grafana 入口。"))
+	publicKeyReady := strings.TrimSpace(readMonitorPublicKey(a.cfg.MonitorSSHKeyPath)) != ""
+	add(SetupChecklistItem{
+		ID:       "monitor-ssh-key",
+		Title:    "只读监控 SSH key",
+		Status:   ternaryText(publicKeyReady, "ok", "warning"),
+		Severity: ternaryText(publicKeyReady, "ok", "warning"),
+		Message:  ternaryText(publicKeyReady, fmt.Sprintf("公钥已准备；已配置 %d 台被管机器。", len(hosts)), "未找到监控公钥；SSH 兜底监控不可用。"),
+		Fix:      "在 ZEPHYR_MONITOR_SSH_KEY_PATH 对应位置放置专用只读 key，并把 .pub 写入被管机器。",
+	})
+	add(SetupChecklistItem{
+		ID:       "monitor-hosts",
+		Title:    "被管机器",
+		Status:   ternaryText(len(hosts) > 0, "ok", "warning"),
+		Severity: ternaryText(len(hosts) > 0, "ok", "warning"),
+		Message:  fmt.Sprintf("已配置 %d 台机器。业务机不需要运行 Peapod，只需要监控 agent 或 SSH 兜底。", len(hosts)),
+		Fix:      "在配置中心添加 production / staging / operations / service 机器。",
+	})
+	verifyStatus := "ok"
+	verifySeverity := "ok"
+	verifyMessage := fmt.Sprintf("部署任务 %d 个，已配置验证 %d 个。", verification.TaskCount, verification.ConfiguredCount)
+	if verification.MissingCount > 0 {
+		verifyStatus = "error"
+		verifySeverity = "error"
+		verifyMessage = fmt.Sprintf("%d 个部署任务缺少 marker/healthz，不能作为可信部署入口。", verification.MissingCount)
+	}
+	add(SetupChecklistItem{
+		ID:       "deployment-verification",
+		Title:    "部署可信验证",
+		Status:   verifyStatus,
+		Severity: verifySeverity,
+		Message:  verifyMessage,
+		Fix:      "给部署/回退/release 任务补充 ZEPHYR_DEPLOY_MARKER_PATH 或 ZEPHYR_DEPLOY_VERIFY_URL。",
+	})
+	add(SetupChecklistItem{
+		ID:          "log-strategy",
+		Title:       "日志策略",
+		Status:      logStrategyChecklistStatus(logStrategy),
+		Severity:    logStrategyChecklistSeverity(logStrategy),
+		Message:     fmt.Sprintf("%s；Docker 日志保留 %s。", logStrategy.Message, logStrategy.DockerRetention),
+		Fix:         "轻量模式配置 Dozzle；完整观测模式配置 Grafana/Loki；外部模式配置第三方日志入口。",
+		ActionLabel: ternaryText(logStrategy.Mode == "observability", "打开 Grafana", "打开 Dozzle"),
+		ActionURL:   firstNonEmptyString(logStrategy.GrafanaPublicURL, logStrategy.DozzlePublicURL),
+	})
+	return items
+}
+
+func (a *App) urlChecklistItem(id string, title string, rawURL string, required bool, fix string) SetupChecklistItem {
+	rawURL = cleanURL(rawURL)
+	if rawURL == "" {
+		status := "optional"
+		severity := "ok"
+		message := "未配置，可按需补充。"
+		if required {
+			status = "warning"
+			severity = "warning"
+			message = "未配置。"
+		}
+		return SetupChecklistItem{ID: id, Title: title, Status: status, Severity: severity, Message: message, Fix: fix}
+	}
+	if err := probePublicURL(rawURL, 800*time.Millisecond); err != nil {
+		return SetupChecklistItem{
+			ID:          id,
+			Title:       title,
+			Status:      "warning",
+			Severity:    "warning",
+			Message:     "已配置，但轻量探测失败：" + err.Error(),
+			Fix:         fix,
+			ActionLabel: "打开",
+			ActionURL:   rawURL,
+		}
+	}
+	return SetupChecklistItem{ID: id, Title: title, Status: "ok", Severity: "ok", Message: "已配置且可访问。", ActionLabel: "打开", ActionURL: rawURL}
+}
+
+func probePublicURL(rawURL string, timeout time.Duration) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return errors.New("URL 格式不正确")
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("不支持 %s", parsed.Scheme)
+	}
+	client := http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodHead, rawURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		req, err = http.NewRequest(http.MethodGet, rawURL, nil)
+		if err != nil {
+			return err
+		}
+		resp, err = client.Do(req)
+	}
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 200 && resp.StatusCode < 500 {
+		return nil
+	}
+	return fmt.Errorf("HTTP %d", resp.StatusCode)
+}
+
+func setupReadiness(items []SetupChecklistItem) string {
+	hasWarning := false
+	for _, item := range items {
+		switch item.Severity {
+		case "error", "critical":
+			return "blocked"
+		case "warning":
+			hasWarning = true
+		}
+	}
+	if hasWarning {
+		return "warning"
+	}
+	return "ready"
+}
+
+func logStrategyChecklistStatus(status LogStrategyStatus) string {
+	switch status.Mode {
+	case "lightweight":
+		if status.DozzlePublicURL == "" {
+			return "warning"
+		}
+	case "observability":
+		if status.GrafanaPublicURL == "" {
+			return "warning"
+		}
+	}
+	return "ok"
+}
+
+func logStrategyChecklistSeverity(status LogStrategyStatus) string {
+	if logStrategyChecklistStatus(status) == "warning" {
+		return "warning"
+	}
+	return "ok"
+}
+
+func deploymentVerificationSummary(tasks []Task) DeploymentVerificationSummary {
+	summary := DeploymentVerificationSummary{MissingTasks: []string{}}
+	for _, task := range tasks {
+		if !deploymentTaskRequiresVerification(task) {
+			continue
+		}
+		summary.TaskCount++
+		if taskHasDeploymentVerification(task) {
+			summary.ConfiguredCount++
+			continue
+		}
+		summary.MissingCount++
+		summary.MissingTasks = append(summary.MissingTasks, fallbackText(task.Title, task.ID))
+	}
+	sort.Strings(summary.MissingTasks)
+	return summary
+}
+
+func (a *App) logStrategyStatus() LogStrategyStatus {
+	mode := normalizeLogStrategy(a.cfg.LogStrategy)
+	if mode == "" {
+		mode = "lightweight"
+	}
+	maxSize := fallbackText(strings.TrimSpace(a.cfg.DockerLogMaxSize), "20m")
+	maxFile := fallbackText(strings.TrimSpace(a.cfg.DockerLogMaxFile), "3")
+	status := LogStrategyStatus{
+		Mode:              mode,
+		DozzlePublicURL:   a.cfg.DozzlePublicURL,
+		GrafanaPublicURL:  a.cfg.GrafanaPublicURL,
+		DockerLogMaxSize:  maxSize,
+		DockerLogMaxFile:  maxFile,
+		DockerRetention:   fmt.Sprintf("%s × %s", maxSize, maxFile),
+		AlertWebhookReady: strings.TrimSpace(a.cfg.AlertWebhookURL) != "",
+	}
+	switch mode {
+	case "observability":
+		status.Label = "完整观测 Grafana/Loki"
+		status.Message = "跨机器历史检索、指标、告警和排障"
+	case "external":
+		status.Label = "外部日志平台"
+		status.Message = "日志由外部平台保存，Peapod 只保留入口和策略说明"
+	default:
+		status.Label = "轻量模式 Dozzle"
+		status.Message = "查看 Docker 已保留日志并实时跟随"
+	}
+	return status
+}
+
 func (a *App) setupCommands(hosts []MonitorHostConfig) []SetupCommand {
 	publicKey := strings.TrimSpace(readMonitorPublicKey(a.cfg.MonitorSSHKeyPath))
 	if publicKey == "" {
@@ -3090,10 +3473,17 @@ func validateRuntimeConfig(cfg RuntimeConfigFile) error {
 		"Beszel PublicURL":     cfg.BeszelPublicURL,
 		"Dozzle PublicURL":     cfg.DozzlePublicURL,
 		"Grafana PublicURL":    cfg.GrafanaPublicURL,
+		"Alert Webhook URL":    cfg.AlertWebhookURL,
 	} {
 		if value != "" && !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
 			return fmt.Errorf("%s 必须以 http:// 或 https:// 开头", label)
 		}
+	}
+	if normalizeLogStrategy(cfg.LogStrategy) == "" {
+		return errors.New("日志策略只支持 lightweight / observability / external")
+	}
+	if strings.TrimSpace(cfg.DockerLogMaxSize) == "" || strings.TrimSpace(cfg.DockerLogMaxFile) == "" {
+		return errors.New("Docker 日志保留参数不能为空")
 	}
 	if cfg.MonitorCritDisk < cfg.MonitorWarnDisk {
 		return errors.New("磁盘严重阈值不能小于提醒阈值")
@@ -3167,6 +3557,14 @@ func taskWithAccessDefaults(task Task) Task {
 	if len(task.AllowedRoles) == 0 && taskRequiresAdmin(task) {
 		task.AllowedRoles = []string{"admin"}
 	}
+	return taskWithVerificationGuard(task)
+}
+
+func taskWithVerificationGuard(task Task) Task {
+	if deploymentTaskRequiresVerification(task) && !taskHasDeploymentVerification(task) {
+		task.Disabled = true
+		task.DisabledReason = "部署任务缺少版本 marker 或 healthz 验证配置"
+	}
 	return task
 }
 
@@ -3199,10 +3597,32 @@ func canRunTask(user AuthUser, task Task) bool {
 }
 
 func taskForbiddenMessage(task Task) string {
+	if task.Disabled && task.DisabledReason != "" {
+		return task.DisabledReason
+	}
 	if taskRequiresAdmin(task) {
 		return "这个动作会影响生产环境，只允许管理员执行"
 	}
 	return "当前账号没有权限执行这个动作"
+}
+
+func deploymentTaskRequiresVerification(task Task) bool {
+	if task.ExternalURL != "" || task.RepoID <= 0 {
+		return false
+	}
+	action := strings.ToLower(strings.TrimSpace(variableValue(task.Variables, "DEPLOY_ACTION")))
+	switch action {
+	case "deploy", "rollback", "release":
+		return true
+	}
+	if isMaintenanceAction(action) {
+		return false
+	}
+	return strings.TrimSpace(variableValue(task.Variables, "ZEPHYR_PROJECT_ID")) != ""
+}
+
+func taskHasDeploymentVerification(task Task) bool {
+	return deploymentVerifyConfigFromVariables(task.Variables).hasChecks()
 }
 
 type ExternalLinkConfig struct {
@@ -3542,9 +3962,13 @@ func normalizeTaskConfig(task *Task) error {
 		return errors.New("至少需要配置一个 Woodpecker 变量")
 	}
 	task.Variables = cleanVariables
+	if deploymentTaskRequiresVerification(*task) && !taskHasDeploymentVerification(*task) {
+		return errors.New("部署类任务必须配置 ZEPHYR_DEPLOY_MARKER_PATH 或 ZEPHYR_DEPLOY_VERIFY_URL")
+	}
 	task.ConfirmText = strings.TrimSpace(task.ConfirmText)
 	task.AllowedRoles = normalizeAllowedRoles(task.AllowedRoles)
 	task.Disabled = false
+	task.DisabledReason = ""
 	task.ExternalURL = ""
 	return nil
 }

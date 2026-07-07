@@ -291,7 +291,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
   function openNewTask() {
     setEditingTask(null);
     taskForm.resetFields();
-    taskForm.setFieldsValue({ branch: "main", risk: "normal", group: "自定义任务" });
+    taskForm.setFieldsValue({ branch: "main", risk: "normal", group: "自定义任务", deploy_marker_path: "", deploy_verify_url: "" });
     setTaskDrawerOpen(true);
   }
 
@@ -310,7 +310,9 @@ function Shell({ page }: { page: "home" | "docs" }) {
     setEditingTask(task);
     taskForm.setFieldsValue({
       ...task,
-      variables: variablesText(task.variables)
+      variables: variablesText(task.variables),
+      deploy_marker_path: deploymentMarkerPath(task.variables || {}),
+      deploy_verify_url: deploymentVerifyURL(task.variables || {})
     });
     setTaskDrawerOpen(true);
   }
@@ -426,7 +428,11 @@ function Shell({ page }: { page: "home" | "docs" }) {
   }
 
   async function saveCustomTask(values: Record<string, unknown>) {
-    const variables = parseVariables(String(values.variables || ""));
+    const variables = withDeploymentVerificationVariables(
+      parseVariables(String(values.variables || "")),
+      String(values.deploy_marker_path || ""),
+      String(values.deploy_verify_url || "")
+    );
     const task: Task = {
       id: String(values.id || editingTask?.id || ""),
       title: String(values.title || ""),
@@ -708,12 +714,12 @@ function Shell({ page }: { page: "home" | "docs" }) {
             <Input.TextArea rows={2} />
           </Form.Item>
           <Row gutter={12}>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Form.Item label="Woodpecker Repo ID" name="repo_id" rules={[{ required: true, message: "请输入 Repo ID" }]}>
                 <Input type="number" placeholder="例如 3" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} md={12}>
               <Form.Item label="执行仓库显示名" name="repo_name">
                 <Input placeholder="例如 infra-platform / app-service" />
               </Form.Item>
@@ -754,8 +760,28 @@ function Shell({ page }: { page: "home" | "docs" }) {
           <Form.Item label="确认文字" name="confirm_text" extra="高危任务建议填写，例如 PROD / ROLLBACK。">
             <Input />
           </Form.Item>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item
+                label="版本 marker 路径"
+                name="deploy_marker_path"
+                extra="部署脚本写入实际 commit 的文件，例如 /opt/app/.deploy/current-source-sha。"
+              >
+                <Input placeholder="/opt/app/.deploy/current-source-sha" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="健康检查 URL"
+                name="deploy_verify_url"
+                extra="服务落地后返回 2xx/3xx 的地址，例如 http://127.0.0.1:8080/healthz。"
+              >
+                <Input placeholder="http://127.0.0.1:8080/healthz" />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item label="Woodpecker 变量" name="variables" rules={[{ required: true, message: "请输入变量" }]}>
-            <Input.TextArea rows={6} placeholder={"DEPLOY_ACTION=deploy\nDEPLOY_TARGET=production"} />
+            <Input.TextArea rows={6} placeholder={"DEPLOY_ACTION=deploy\nZEPHYR_PROJECT_ID=my-service\nZEPHYR_PROJECT_NAME=我的服务"} />
           </Form.Item>
           <Button type="primary" htmlType="submit" block>
             保存任务配置
@@ -809,4 +835,27 @@ function LoadingShell({ error, onRetry }: { error?: string; onRetry?: () => void
       </Content>
     </Layout>
   );
+}
+
+function deploymentMarkerPath(values: Record<string, string>): string {
+  return values.ZEPHYR_DEPLOY_MARKER_PATH || values.DEPLOY_MARKER_PATH || "";
+}
+
+function deploymentVerifyURL(values: Record<string, string>): string {
+  return values.ZEPHYR_DEPLOY_VERIFY_URL || values.ZEPHYR_HEALTH_URL || values.DEPLOY_HEALTH_URL || values.HEALTH_URL || "";
+}
+
+function withDeploymentVerificationVariables(values: Record<string, string>, markerPath: string, verifyURL: string): Record<string, string> {
+  const next = { ...values };
+  for (const key of ["ZEPHYR_DEPLOY_MARKER_PATH", "DEPLOY_MARKER_PATH"]) {
+    delete next[key];
+  }
+  for (const key of ["ZEPHYR_DEPLOY_VERIFY_URL", "ZEPHYR_HEALTH_URL", "DEPLOY_HEALTH_URL", "HEALTH_URL"]) {
+    delete next[key];
+  }
+  const marker = markerPath.trim();
+  const health = verifyURL.trim();
+  if (marker) next.ZEPHYR_DEPLOY_MARKER_PATH = marker;
+  if (health) next.ZEPHYR_DEPLOY_VERIFY_URL = health;
+  return next;
 }

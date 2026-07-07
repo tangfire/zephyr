@@ -129,7 +129,7 @@ Task example:
 ```
 
 Use the same `ZEPHYR_PROJECT_ID` for deploy and rollback tasks so the project status table can merge them into one service row.
-Set `ZEPHYR_DEPLOY_MARKER_PATH` and/or `ZEPHYR_DEPLOY_VERIFY_URL` when possible. Peapod will then show a deployment as verified only after the marker commit matches the successful pipeline and the health endpoint returns 2xx/3xx.
+Deploy and rollback tasks must set `ZEPHYR_DEPLOY_MARKER_PATH` or `ZEPHYR_DEPLOY_VERIFY_URL`. Peapod treats a Woodpecker success as only a build result; a deployment becomes the current verified online version only after the marker commit matches and/or the health endpoint returns 2xx/3xx. Without either check, Peapod shows "build succeeded, deployment unverified" and disables that task as a trusted deploy entry.
 
 ## Peapod Self Deploy
 
@@ -187,7 +187,7 @@ After that, daily operations should happen inside Peapod:
 - check host CPU, memory, disk, containers
 - open Woodpecker/Beszel/Dozzle/Grafana only for deeper details
 
-For small machines, keep the default lightweight profile first. It uses Beszel for resource curves and Dozzle for Docker-retained container logs plus live tailing. Enable the `observability` profile only when you need searchable log history across hosts, metrics retention, traces, or Grafana alerts.
+For small machines, keep the default lightweight profile first. It uses Beszel for resource curves and Dozzle for Docker-retained container logs plus live tailing. Enable the `observability` profile only when you need searchable log history across hosts, metrics retention, traces, or Grafana alerts. Peapod's setup page shows the active log strategy and Docker log rotation values, defaulting to `DOCKER_LOG_MAX_SIZE=20m` and `DOCKER_LOG_MAX_FILE=3`.
 
 ## Boundary
 

@@ -64,4 +64,78 @@ func TestApplyDeploymentVerificationPipelineOnly(t *testing.T) {
 	if status.DeployVerifyStatus != "pipeline_only" {
 		t.Fatalf("DeployVerifyStatus = %q", status.DeployVerifyStatus)
 	}
+	if !strings.Contains(status.DeployVerifyMessage, "构建成功，部署未验证") {
+		t.Fatalf("message = %q", status.DeployVerifyMessage)
+	}
+}
+
+func TestDeploymentStatusesOnlyVerifiedPipelineBecomesCurrent(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "current-source-sha")
+	if err := os.WriteFile(marker, []byte("verified123\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	task := Task{
+		ID:     "deploy-app",
+		Title:  "部署应用",
+		Group:  "业务服务",
+		RepoID: 7,
+		Branch: "main",
+		Variables: map[string]string{
+			"DEPLOY_ACTION":             "deploy",
+			"ZEPHYR_PROJECT_ID":         "app",
+			"ZEPHYR_DEPLOY_MARKER_PATH": marker,
+		},
+	}
+	pipelines := map[int][]Pipeline{7: {
+		{Number: 2, Status: "success", Branch: "main", Commit: "unverified999", Finished: 200, Variables: task.Variables},
+		{Number: 1, Status: "success", Branch: "main", Commit: "verified123", Finished: 100, Variables: task.Variables},
+	}}
+
+	rows := deploymentStatuses([]Task{task}, map[int]string{7: "app"}, pipelines)
+	if len(rows) != 1 {
+		t.Fatalf("rows len = %d, want 1", len(rows))
+	}
+	if rows[0].CurrentCommit != "verified123" {
+		t.Fatalf("CurrentCommit = %q, want verified commit", rows[0].CurrentCommit)
+	}
+	if rows[0].Pipeline != 1 {
+		t.Fatalf("Pipeline = %d, want verified pipeline #1", rows[0].Pipeline)
+	}
+	if rows[0].LatestCommit != "unverified999" {
+		t.Fatalf("LatestCommit = %q, want latest unverified commit", rows[0].LatestCommit)
+	}
+}
+
+func TestNormalizeTaskConfigRequiresDeploymentVerification(t *testing.T) {
+	task := Task{
+		ID:     "deploy-app",
+		Title:  "部署应用",
+		RepoID: 7,
+		Branch: "main",
+		Variables: map[string]string{
+			"DEPLOY_ACTION":     "deploy",
+			"ZEPHYR_PROJECT_ID": "app",
+		},
+	}
+	if err := normalizeTaskConfig(&task); err == nil {
+		t.Fatal("normalizeTaskConfig returned nil, want verification error")
+	}
+	task.Variables["ZEPHYR_DEPLOY_VERIFY_URL"] = "http://127.0.0.1:8080/healthz"
+	if err := normalizeTaskConfig(&task); err != nil {
+		t.Fatalf("normalizeTaskConfig with healthz returned error: %v", err)
+	}
+}
+
+func TestMaintenanceTaskDoesNotRequireDeploymentVerification(t *testing.T) {
+	task := Task{
+		ID:     "cleanup",
+		Title:  "清理磁盘",
+		RepoID: 7,
+		Variables: map[string]string{
+			"DEPLOY_ACTION": "cleanup",
+		},
+	}
+	if err := normalizeTaskConfig(&task); err != nil {
+		t.Fatalf("normalizeTaskConfig maintenance returned error: %v", err)
+	}
 }

@@ -21,6 +21,7 @@ export type Task = {
   allowed_roles?: string[];
   inputs?: TaskInput[];
   disabled?: boolean;
+  disabled_reason?: string;
   external_url?: string;
   custom?: boolean;
   builtin?: boolean;
@@ -239,6 +240,10 @@ export type RuntimeConfigInput = {
   beszel_password?: string;
   dozzle_public_url: string;
   grafana_public_url: string;
+  log_strategy: "lightweight" | "observability" | "external";
+  docker_log_max_size: string;
+  docker_log_max_file: string;
+  alert_webhook_url?: string;
   external_links: ExternalLinkConfig[];
   monitor_hosts: MonitorHostConfig[];
   monitor_refresh_seconds: number;
@@ -254,6 +259,36 @@ export type SetupStatusItem = {
   message: string;
   action_label?: string;
   action_url?: string;
+};
+
+export type SetupChecklistItem = {
+  id: string;
+  title: string;
+  status: "ok" | "warning" | "error" | "unknown" | "optional" | string;
+  severity: "ok" | "warning" | "error" | string;
+  message: string;
+  fix?: string;
+  action_label?: string;
+  action_url?: string;
+};
+
+export type DeploymentVerificationSummary = {
+  task_count: number;
+  configured_count: number;
+  missing_count: number;
+  missing_tasks: string[];
+};
+
+export type LogStrategyStatus = {
+  mode: "lightweight" | "observability" | "external" | string;
+  label: string;
+  message: string;
+  dozzle_public_url?: string;
+  grafana_public_url?: string;
+  docker_log_max_size: string;
+  docker_log_max_file: string;
+  docker_retention: string;
+  alert_webhook_ready?: boolean;
 };
 
 export type SetupCommand = {
@@ -272,7 +307,11 @@ export type SetupDocLink = {
 export type SetupConfigResponse = {
   config: RuntimeConfigInput;
   secrets: Record<string, boolean>;
+  readiness: "ready" | "warning" | "blocked" | string;
   status: SetupStatusItem[];
+  checklist: SetupChecklistItem[];
+  deployment_verification_summary: DeploymentVerificationSummary;
+  log_strategy: LogStrategyStatus;
   commands: SetupCommand[];
   docs: SetupDocLink[];
   updated_at: string;

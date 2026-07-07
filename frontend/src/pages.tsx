@@ -53,7 +53,9 @@ import { ApiError, api, errorText } from "./api";
 import { LEGACY_PRODUCT_REPO_NAME, PRODUCT_NAME, PRODUCT_REPO_NAME, PRODUCT_REPO_OWNER } from "./brand";
 import type {
   AuditRecord,
+  DeploymentVerificationSummary,
   DeploymentStatus,
+  LogStrategyStatus,
   MonitoringAlert,
   MonitoringContainer,
   MonitoringHost,
@@ -64,6 +66,7 @@ import type {
   RuntimeConfigInput,
   Risk,
   SetupConfigResponse,
+  SetupChecklistItem,
   StateResponse,
   Task,
   TaskConfig,
@@ -323,7 +326,7 @@ export function DeployPage({
   const verifiedCount = rows.filter((row) => row.deploy_verified).length;
   const attentionCount = rows.filter((row) => {
     const status = row.latest_status || row.last_status;
-    return ["failure", "error", "killed"].includes(status) || row.deploy_verify_status === "mismatch";
+    return ["failure", "error", "killed"].includes(status) || Boolean(row.deploy_verify_status && row.deploy_verify_status !== "verified" && (row.latest_status === "success" || row.current_commit));
   }).length;
   return (
     <Space direction="vertical" size={16} className="side-stack">
@@ -441,41 +444,52 @@ export function SettingsPage({
   const configurableTaskCount = (state.tasks || []).filter((task) => !task.external_url).length;
   const screens = Grid.useBreakpoint();
   const compactSettingsNav = !screens.md;
-  const [activeSetting, setActiveSetting] = useState("account");
+  const [activeSetting, setActiveSetting] = useState("setup");
   const settingItems = [
+    {
+      key: "setup",
+      label: "接入向导",
+      shortLabel: "接入",
+      children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
+    },
+    {
+      key: "hosts",
+      label: "环境与机器",
+      shortLabel: "机器",
+      children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} initialSection="hosts" /> : <Alert type="info" showIcon message="机器配置只允许管理员查看和修改" />
+    },
+    {
+      key: "repos",
+      label: "仓库与任务",
+      shortLabel: "仓库",
+      children: (
+        <Space direction="vertical" size={16} className="side-stack">
+          {state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />}
+          {state.configurable ? (
+            <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
+          ) : (
+            <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
+          )}
+        </Space>
+      )
+    },
+    { key: "links", label: "外部入口", shortLabel: "入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
+    {
+      key: "logs",
+      label: "日志策略",
+      shortLabel: "日志",
+      children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} initialSection="logs" /> : <Alert type="info" showIcon message="日志策略只允许管理员查看和修改" />
+    },
     {
       key: "account",
       label: "账号与成员",
-      shortLabel: "账号",
+      shortLabel: "成员",
       children: (
         <Space direction="vertical" size={16} className="side-stack">
           <Profile state={state} onReload={onReload} />
           {state.current_user.role === "admin" && state.auth_mode === "db" && <Users />}
         </Space>
       )
-    },
-    {
-      key: "repos",
-      label: "仓库配置",
-      shortLabel: "仓库",
-      children: state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />
-    },
-    { key: "links", label: "基础设施入口", shortLabel: "入口", children: <InfrastructureLinks tasks={state.tasks || []} compact /> },
-    {
-      key: "tasks",
-      label: "部署任务",
-      shortLabel: "任务",
-      children: state.configurable ? (
-        <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
-      ) : (
-        <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
-      )
-    },
-    {
-      key: "setup",
-      label: "接入配置",
-      shortLabel: "接入",
-      children: state.current_user.role === "admin" ? <SetupConfigPanel onReload={onReload} /> : <Alert type="info" showIcon message="接入配置只允许管理员查看和修改" />
     },
     { key: "audit", label: "操作历史", shortLabel: "历史", children: <AuditLogView records={auditRecords} loading={auditLoading} state={state} onRefresh={onAuditRefresh} /> },
     { key: "docs", label: "参数文档", shortLabel: "文档", children: <Docs state={state} compact /> }
@@ -846,7 +860,7 @@ function DeploymentStatusTable({
               <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
             </Space>
           ) : (
-            <Tag>暂无成功部署</Tag>
+            <Tag color={deployVerifyColor(row)}>{deployVerifyText(row)}</Tag>
           )}
           <Text code={Boolean(row.current_commit)}>{deploymentCommitLine(row)}</Text>
           {row.actual_commit && !commitLooksSame(row.actual_commit, row.current_commit) && (
@@ -895,12 +909,16 @@ function DeploymentStatusTable({
         return (
           <Space>
             {actions.deploy && (
-              <Button size="small" type="primary" loading={triggeringTaskIDSet.has(actions.deploy.id)} disabled={!canRunTask(currentUser, actions.deploy)} onClick={() => onRun(actions.deploy!)}>
-                部署
-              </Button>
+              <Tooltip title={taskDisabledTitle(currentUser, actions.deploy)}>
+                <span>
+                  <Button size="small" type="primary" loading={triggeringTaskIDSet.has(actions.deploy.id)} disabled={!canRunTask(currentUser, actions.deploy)} onClick={() => onRun(actions.deploy!)}>
+                    部署
+                  </Button>
+                </span>
+              </Tooltip>
             )}
             {actions.rollback && (
-              <Tooltip title={canRunTask(currentUser, actions.rollback) ? "" : "仅管理员可执行"}>
+              <Tooltip title={taskDisabledTitle(currentUser, actions.rollback)}>
                 <span>
                   <Button size="small" danger loading={triggeringTaskIDSet.has(actions.rollback.id)} disabled={!canRunTask(currentUser, actions.rollback)} onClick={() => onRun(actions.rollback!)}>
                     回退
@@ -2167,12 +2185,117 @@ function RepositoryConfigPanel({ state, onReload }: { state: StateResponse; onRe
   );
 }
 
-function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
+function SetupGuidePanel({ setup, loading, onRefresh }: { setup: SetupConfigResponse | null; loading: boolean; onRefresh: () => void }) {
+  const checklist = setup?.checklist || [];
+  const verification = setup?.deployment_verification_summary;
+  const logStrategy = setup?.log_strategy;
+  return (
+    <ProCard
+      title="接入向导"
+      extra={<Button icon={<RefreshCw size={16} />} loading={loading} onClick={onRefresh}>刷新检查</Button>}
+    >
+      <Space direction="vertical" size={14} className="side-stack">
+        <Row gutter={[12, 12]}>
+          <Col xs={24} lg={8}>
+            <Card size="small" className={`setup-readiness-card setup-readiness-${setup?.readiness || "warning"}`}>
+              <Space direction="vertical" size={8}>
+                <Tag color={readinessColor(setup?.readiness || "warning")}>{readinessText(setup?.readiness || "warning")}</Tag>
+                <Text strong>上线准备度</Text>
+                <Text type="secondary">阻断项会优先显示；warning 项不阻塞，但建议上线前处理。</Text>
+              </Space>
+            </Card>
+          </Col>
+          <Col xs={24} lg={8}>
+            <VerificationSummaryCard summary={verification} />
+          </Col>
+          <Col xs={24} lg={8}>
+            {logStrategy ? <LogStrategyCard status={logStrategy} compact /> : <Card size="small" loading />}
+          </Col>
+        </Row>
+        <Row gutter={[12, 12]}>
+          {checklist.map((item) => (
+            <Col xs={24} md={12} xl={8} key={item.id}>
+              <ChecklistCard item={item} />
+            </Col>
+          ))}
+          {!checklist.length && (
+            <Col span={24}>
+              <Alert type="info" showIcon message="正在加载接入检查" />
+            </Col>
+          )}
+        </Row>
+      </Space>
+    </ProCard>
+  );
+}
+
+function ChecklistCard({ item }: { item: SetupChecklistItem }) {
+  return (
+    <Card size="small" className="setup-checklist-card">
+      <Space direction="vertical" size={8} className="side-stack">
+        <Space align="center" className="setup-status-head">
+          <Tag color={setupStatusColor(item.status)}>{setupStatusText(item.status)}</Tag>
+          <Text strong>{item.title}</Text>
+        </Space>
+        <Text type="secondary">{item.message}</Text>
+        {item.fix && <Text className="checklist-fix">{item.fix}</Text>}
+        {item.action_url && (
+          <Button size="small" href={item.action_url} target="_blank" icon={<ExternalLink size={14} />}>
+            {item.action_label || "打开"}
+          </Button>
+        )}
+      </Space>
+    </Card>
+  );
+}
+
+function VerificationSummaryCard({ summary }: { summary?: DeploymentVerificationSummary }) {
+  const missing = summary?.missing_count || 0;
+  return (
+    <Card size="small" className="setup-summary-card">
+      <Space direction="vertical" size={8} className="side-stack">
+        <Space>
+          <Tag color={missing ? "error" : "success"}>{missing ? "有阻断" : "已闭环"}</Tag>
+          <Text strong>部署可信验证</Text>
+        </Space>
+        <Text>{summary ? `${summary.configured_count}/${summary.task_count} 个部署任务已配置验证` : "-"}</Text>
+        {missing > 0 ? (
+          <Text type="danger" ellipsis={{ tooltip: summary?.missing_tasks?.join("、") }}>缺少：{summary?.missing_tasks?.slice(0, 3).join("、")}</Text>
+        ) : (
+          <Text type="secondary">部署入口会校验 marker 或 healthz。</Text>
+        )}
+      </Space>
+    </Card>
+  );
+}
+
+function LogStrategyCard({ status, compact = false }: { status: LogStrategyStatus; compact?: boolean }) {
+  return (
+    <Card size="small" className="setup-summary-card">
+      <Space direction="vertical" size={compact ? 8 : 10} className="side-stack">
+        <Space>
+          <Tag color={logStrategyColor(status.mode)}>{status.label}</Tag>
+          <Text strong>日志策略</Text>
+        </Space>
+        <Text type="secondary">{status.message}</Text>
+        <Text>Docker 保留：{status.docker_retention}</Text>
+        <Space wrap>
+          {status.dozzle_public_url && <Button size="small" href={status.dozzle_public_url} target="_blank">Dozzle</Button>}
+          {status.grafana_public_url && <Button size="small" href={status.grafana_public_url} target="_blank">Grafana</Button>}
+          {status.alert_webhook_ready && <Tag color="green">告警已配置</Tag>}
+        </Space>
+      </Space>
+    </Card>
+  );
+}
+
+function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: () => Promise<void>; initialSection?: "guide" | "hosts" | "logs" }) {
   const { message } = AntApp.useApp();
   const [form] = Form.useForm<RuntimeConfigInput>();
   const [setup, setSetup] = useState<SetupConfigResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const focusTitle = initialSection === "hosts" ? "环境与机器" : initialSection === "logs" ? "日志策略" : "接入向导";
 
   async function loadSetup(options: { notify?: boolean } = {}) {
     setLoading(true);
@@ -2216,36 +2339,12 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
       <Alert
         type="info"
         showIcon
-        message={`这里维护 ${PRODUCT_NAME} 的可视化接入配置`}
-        description="URL、监控主机、外部入口会回显；Woodpecker token 和 Beszel 密码只显示是否已配置，留空保存会保留原值。"
+        message={`${focusTitle}配置`}
+        description="URL、监控主机、外部入口和日志策略会回显；token、密码和告警 webhook 只显示是否已配置，留空保存会保留原值。"
       />
-      <ProCard
-        title="接入状态"
-        extra={<Button icon={<RefreshCw size={16} />} loading={loading} onClick={() => loadSetup({ notify: true })}>刷新</Button>}
-      >
-        <Row gutter={[12, 12]}>
-          {(setup?.status || []).map((item) => (
-            <Col xs={24} md={12} xl={8} key={item.id}>
-              <Card size="small" className="setup-status-card">
-                <Space direction="vertical" size={8} className="side-stack">
-                  <Space align="center" className="setup-status-head">
-                    <Tag color={setupStatusColor(item.status)}>{setupStatusText(item.status)}</Tag>
-                    <Text strong>{item.title}</Text>
-                  </Space>
-                  <Text type="secondary">{item.message || "-"}</Text>
-                  {item.action_url && (
-                    <Button size="small" href={item.action_url} target="_blank" icon={<ExternalLink size={14} />}>
-                      {item.action_label || "打开"}
-                    </Button>
-                  )}
-                </Space>
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      </ProCard>
-
+      <SetupGuidePanel setup={setup} loading={loading} onRefresh={() => loadSetup({ notify: true })} />
       <Form form={form} layout="vertical" onFinish={save} disabled={loading}>
+        {initialSection === "guide" && (
         <ProCard title="核心服务" className="setup-form-card">
           <Row gutter={12}>
             <Col xs={24} lg={8}>
@@ -2300,6 +2399,34 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
                 <Input.Password placeholder={setup?.secrets?.beszel_password ? "留空保留原密码" : "填入 Beszel 密码"} autoComplete="new-password" />
               </Form.Item>
             </Col>
+          </Row>
+        </ProCard>
+        )}
+
+        {initialSection !== "hosts" && (
+        <ProCard title="日志策略" className="setup-form-card">
+          <Row gutter={12}>
+            <Col xs={24} lg={8}>
+              <Form.Item label="当前日志模式" name="log_strategy" extra="轻量模式用 Dozzle；完整观测用 Grafana/Loki；外部模式只保留入口。">
+                <Select
+                  options={[
+                    { value: "lightweight", label: "轻量模式 Dozzle" },
+                    { value: "observability", label: "完整观测 Grafana/Loki" },
+                    { value: "external", label: "外部日志平台" }
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={12} lg={4}>
+              <Form.Item label="Docker max-size" name="docker_log_max_size">
+                <Input placeholder="20m" />
+              </Form.Item>
+            </Col>
+            <Col xs={12} lg={4}>
+              <Form.Item label="Docker max-file" name="docker_log_max_file">
+                <Input placeholder="3" />
+              </Form.Item>
+            </Col>
             <Col xs={24} lg={8}>
               <Form.Item label="Dozzle 公开地址" name="dozzle_public_url" extra="轻量日志入口：查看 Docker 已保留日志，并实时跟随新日志，不落地集中日志库。">
                 <Input placeholder="https://logs.example.com" />
@@ -2312,9 +2439,21 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
                 <Input placeholder="https://grafana.example.com" />
               </Form.Item>
             </Col>
+            <Col xs={24} lg={8}>
+              <Form.Item
+                label="告警 Webhook"
+                name="alert_webhook_url"
+                extra={setup?.secrets?.alert_webhook ? "已配置；留空保存会保留原 webhook。" : "可选；用于后续接入飞书/企业微信告警。"}
+              >
+                <Input.Password placeholder={setup?.secrets?.alert_webhook ? "留空保留原 webhook" : "https://..."} autoComplete="new-password" />
+              </Form.Item>
+            </Col>
           </Row>
+          {setup?.log_strategy && <LogStrategyCard status={setup.log_strategy} />}
         </ProCard>
+        )}
 
+        {initialSection !== "logs" && (
         <ProCard title="监控阈值" className="setup-form-card">
           <Row gutter={12}>
             <Col xs={12} lg={6}>
@@ -2339,7 +2478,9 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
             </Col>
           </Row>
         </ProCard>
+        )}
 
+        {initialSection !== "logs" && (
         <ProCard
           title="被管机器"
           className="setup-form-card"
@@ -2372,7 +2513,14 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
                       </Col>
                       <Col xs={24} lg={6}>
                         <Form.Item label="角色" name={[field.name, "role"]}>
-                          <Input placeholder="production / builder" />
+                          <Select
+                            options={[
+                              { value: "operations", label: "operations 运维/构建机" },
+                              { value: "production", label: "production 生产机" },
+                              { value: "staging", label: "staging 测试机" },
+                              { value: "service", label: "service 业务机" }
+                            ]}
+                          />
                         </Form.Item>
                       </Col>
                       <Col xs={24} lg={6}>
@@ -2410,7 +2558,9 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
             )}
           </Form.List>
         </ProCard>
+        )}
 
+        {initialSection === "guide" && (
         <ProCard
           title="外部入口"
           className="setup-form-card"
@@ -2462,6 +2612,7 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
             )}
           </Form.List>
         </ProCard>
+        )}
 
         <Button type="primary" htmlType="submit" loading={saving} size="large">
           保存接入配置
@@ -2542,6 +2693,7 @@ function TaskConfigView({
                   {row.builtin && <Tag>内置</Tag>}
                   {row.custom && <Tag color="blue">自定义</Tag>}
                   {row.overridden && <Tag color="gold">已覆盖</Tag>}
+                  {row.disabled && <Tag color="red">{row.disabled_reason || "不可执行"}</Tag>}
                 </Space>
               </Space>
             )
@@ -2660,7 +2812,7 @@ function pipelineAttentionKeys(row: Pipeline): string[] {
 
 function overviewDeploymentRows(rows: DeploymentStatus[], limit: number): DeploymentStatus[] {
   return sortDeploymentRows(rows)
-    .filter((row) => row.current_branch || deploymentAttentionRank(row) <= 1)
+    .filter((row) => row.deploy_verified && row.current_branch)
     .slice(0, limit);
 }
 
@@ -2715,6 +2867,10 @@ function normalizeSetupFormValues(values: RuntimeConfigInput): RuntimeConfigInpu
     beszel_password: String(values.beszel_password || "").trim(),
     dozzle_public_url: String(values.dozzle_public_url || "").trim(),
     grafana_public_url: String(values.grafana_public_url || "").trim(),
+    log_strategy: normalizeLogStrategyValue(values.log_strategy),
+    docker_log_max_size: String(values.docker_log_max_size || "20m").trim(),
+    docker_log_max_file: String(values.docker_log_max_file || "3").trim(),
+    alert_webhook_url: String(values.alert_webhook_url || "").trim(),
     external_links: externalLinks,
     monitor_hosts: monitorHosts,
     monitor_refresh_seconds: Number(values.monitor_refresh_seconds || 20),
@@ -2734,6 +2890,7 @@ function normalizeStringArray(values?: string[]): string[] {
 function setupStatusColor(status: string): string {
   if (status === "ok") return "success";
   if (status === "optional") return "default";
+  if (status === "unknown") return "processing";
   if (status === "error" || status === "critical") return "error";
   return "warning";
 }
@@ -2741,8 +2898,33 @@ function setupStatusColor(status: string): string {
 function setupStatusText(status: string): string {
   if (status === "ok") return "已就绪";
   if (status === "optional") return "可选";
+  if (status === "unknown") return "待确认";
   if (status === "error" || status === "critical") return "异常";
   return "待配置";
+}
+
+function readinessColor(value: string): string {
+  if (value === "ready") return "success";
+  if (value === "blocked") return "error";
+  return "gold";
+}
+
+function readinessText(value: string): string {
+  if (value === "ready") return "可以上线";
+  if (value === "blocked") return "有阻断项";
+  return "待补齐";
+}
+
+function logStrategyColor(value: string): string {
+  if (value === "observability") return "blue";
+  if (value === "external") return "purple";
+  return "green";
+}
+
+function normalizeLogStrategyValue(value: unknown): "lightweight" | "observability" | "external" {
+  const raw = String(value || "").trim();
+  if (raw === "observability" || raw === "external") return raw;
+  return "lightweight";
 }
 
 export function branchOptionsForTask(state: StateResponse, task: Task): { value: string; label: string }[] {
@@ -2985,7 +3167,7 @@ function statusText(status?: string): string {
 }
 
 function deployVerifyColor(row: DeploymentStatus): string {
-  if (!row.current_commit) return "default";
+  if (!row.current_commit && row.latest_status !== "success") return "default";
   if (row.deploy_verified) return "success";
   switch (row.deploy_verify_status) {
     case "pipeline_only":
@@ -3000,11 +3182,18 @@ function deployVerifyColor(row: DeploymentStatus): string {
 }
 
 function deployVerifyText(row: DeploymentStatus): string {
+  if (!row.current_commit && row.latest_status === "success" && row.deploy_verify_status) {
+    if (row.deploy_verify_status === "pipeline_only") return "构建成功未验证";
+    if (row.deploy_verify_status === "marker_mismatch") return "版本不一致";
+    if (row.deploy_verify_status === "marker_missing") return "未落地";
+    if (row.deploy_verify_status === "health_failed") return "健康失败";
+    return "待确认";
+  }
   if (!row.current_commit) return "未部署";
   if (row.deploy_verified) return "已验证";
   switch (row.deploy_verify_status) {
     case "pipeline_only":
-      return "仅流水线";
+      return "构建成功未验证";
     case "marker_mismatch":
       return "版本不一致";
     case "marker_missing":
@@ -3017,7 +3206,13 @@ function deployVerifyText(row: DeploymentStatus): string {
 }
 
 function deploymentVersionText(row: DeploymentStatus, nowMs: number): string {
-  if (!row.current_branch) return "暂无成功部署";
+  if (!row.current_branch) {
+    if (row.latest_status === "success" && row.latest_commit) {
+      const age = row.latest_at ? ` · ${deployedAgeText(row.latest_at, nowMs)}` : "";
+      return `构建成功未验证 ${row.latest_branch || "-"} · ${(row.latest_commit || "").slice(0, 8)}${age}`;
+    }
+    return "暂无已验证部署";
+  }
   const label = row.deploy_verified ? "已验证" : row.deploy_verify_status === "pipeline_only" ? "流水线成功" : "待确认";
   const age = row.last_deployed_at ? ` · ${deployedAgeText(row.last_deployed_at, nowMs)}` : "";
   return `${label} ${row.current_branch} · ${(row.current_commit || "").slice(0, 8) || "-"}${age}`;
@@ -3034,6 +3229,7 @@ function sortDeploymentRows(rows: DeploymentStatus[]): DeploymentStatus[] {
 }
 
 function deploymentAttentionRank(row: DeploymentStatus): number {
+  if (!row.current_commit && row.latest_status === "success" && row.deploy_verify_status) return 0;
   if (row.current_commit && !row.deploy_verified && row.deploy_verify_status !== "pipeline_only") return 0;
   if (row.latest_status === "failure" || row.latest_status === "error" || row.last_status === "failure" || row.last_status === "error") return 1;
   if (row.deploy_verified) return 2;
@@ -3050,7 +3246,7 @@ function deploymentCommitLine(row: DeploymentStatus): string {
 function shortDeploymentVerifyMessage(row: DeploymentStatus): string {
   if (!row.deploy_verify_message) return "";
   if (row.deploy_verified) return "版本和健康检查已通过";
-  if (row.deploy_verify_status === "pipeline_only") return "缺少部署验证配置";
+  if (row.deploy_verify_status === "pipeline_only") return "构建成功，部署未验证";
   return row.deploy_verify_message.length > 32 ? `${row.deploy_verify_message.slice(0, 32)}...` : row.deploy_verify_message;
 }
 
@@ -3066,6 +3262,12 @@ export function canRunTask(user: User, task: Task): boolean {
   const roles = task.allowed_roles || [];
   if (!roles.length) return true;
   return roles.includes(user.role);
+}
+
+function taskDisabledTitle(user: User, task: Task): string {
+  if (task.disabled) return task.disabled_reason || "这个任务当前不可执行";
+  if (!canRunTask(user, task)) return "当前账号没有权限执行";
+  return "";
 }
 
 function isRollbackTask(task: Task): boolean {
@@ -3165,16 +3367,24 @@ function mobileDeploymentActions(
   const out: ReactNode[] = [];
   if (actions.deploy) {
     out.push(
-      <Button key="deploy" size="small" type="primary" loading={triggeringTaskIDSet.has(actions.deploy.id)} disabled={!canRunTask(currentUser, actions.deploy)} onClick={() => onRun(actions.deploy!)}>
-        部署
-      </Button>
+      <Tooltip key="deploy" title={taskDisabledTitle(currentUser, actions.deploy)}>
+        <span>
+          <Button size="small" type="primary" loading={triggeringTaskIDSet.has(actions.deploy.id)} disabled={!canRunTask(currentUser, actions.deploy)} onClick={() => onRun(actions.deploy!)}>
+            部署
+          </Button>
+        </span>
+      </Tooltip>
     );
   }
   if (actions.rollback) {
     out.push(
-      <Button key="rollback" size="small" danger loading={triggeringTaskIDSet.has(actions.rollback.id)} disabled={!canRunTask(currentUser, actions.rollback)} onClick={() => onRun(actions.rollback!)}>
-        回退
-      </Button>
+      <Tooltip key="rollback" title={taskDisabledTitle(currentUser, actions.rollback)}>
+        <span>
+          <Button size="small" danger loading={triggeringTaskIDSet.has(actions.rollback.id)} disabled={!canRunTask(currentUser, actions.rollback)} onClick={() => onRun(actions.rollback!)}>
+            回退
+          </Button>
+        </span>
+      </Tooltip>
     );
   }
   if (actions.extras.length) {

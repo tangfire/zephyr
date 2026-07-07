@@ -995,6 +995,44 @@ body {
   background: #fbfdf9;
 }
 
+.setup-readiness-card,
+.setup-summary-card,
+.setup-checklist-card {
+  height: 100%;
+  border-radius: 8px;
+}
+
+.setup-readiness-card .ant-card-body,
+.setup-summary-card .ant-card-body,
+.setup-checklist-card .ant-card-body {
+  height: 100%;
+}
+
+.setup-readiness-ready {
+  border-color: #b7df9b;
+  background: #f5fbef;
+}
+
+.setup-readiness-warning {
+  border-color: #f3d27a;
+  background: #fffaf0;
+}
+
+.setup-readiness-blocked {
+  border-color: #f1a5a2;
+  background: #fff4f2;
+}
+
+.checklist-fix {
+  color: #5f6f55;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.setup-form-card .ant-pro-card-title {
+  font-size: 15px;
+}
+
 @keyframes logo-breathe {
   0%,
   100% {
