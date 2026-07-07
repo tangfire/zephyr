@@ -1,5 +1,6 @@
 .env
 .env.host
+docker-compose.override.yml
 .deploy/
 *.bak.*
 data/
