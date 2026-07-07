@@ -469,6 +469,12 @@ func (a *App) logHostDisplayNames(rows []dozzleContainerRaw) map[string]string {
 			names[host] = display
 			continue
 		}
+		if len(hosts) == 1 {
+			if display := preferredLogHostDisplayName(configs); display != "" {
+				names[host] = display
+				continue
+			}
+		}
 		if len(hosts) == 1 && len(configs) == 1 {
 			names[host] = strings.TrimSpace(firstNonEmpty(configs[0].Name, configs[0].ID, "运维机"))
 			continue
@@ -480,6 +486,19 @@ func (a *App) logHostDisplayNames(rows []dozzleContainerRaw) map[string]string {
 		names[host] = host
 	}
 	return names
+}
+
+func preferredLogHostDisplayName(configs []MonitorHostConfig) string {
+	if len(configs) == 0 {
+		return ""
+	}
+	for _, cfg := range configs {
+		text := strings.ToLower(strings.Join([]string{cfg.ID, cfg.Name, cfg.Role}, " "))
+		if strings.Contains(text, "operation") || strings.Contains(text, "ops") || strings.Contains(text, "build") || strings.Contains(text, "peapod") || strings.Contains(text, "运维") || strings.Contains(text, "构建") {
+			return strings.TrimSpace(firstNonEmpty(cfg.Name, cfg.ID))
+		}
+	}
+	return strings.TrimSpace(firstNonEmpty(configs[0].Name, configs[0].ID))
 }
 
 func isLikelyOpaqueHostID(value string) bool {

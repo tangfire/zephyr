@@ -1791,10 +1791,9 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
   return (
     <Space direction="vertical" size={16} className="side-stack">
       <PageIntro
-        title="日志工作台"
-        description="在 Peapod 里聚合 Docker 已保留日志、快速筛选容器和错误；长期历史和告警仍交给 Grafana/Loki。"
+        title="日志"
+        description="聚合 Docker 已保留日志，快速筛选服务、错误和请求。"
         stats={[
-          { label: "策略", value: shortLogStrategyLabel(summary), tone: summary?.mode === "observability" ? "normal" : "success" },
           { label: "查询源", value: querySourceText, tone: activeSource === "dozzle_mcp" ? "success" : activeSource === "ssh_fallback" ? "warning" : "danger" },
           { label: "容器", value: `${healthyContainers}/${summary?.container_count ?? containers.length}`, tone: healthyContainers ? "normal" : "warning" },
           { label: "保留", value: summary?.docker_retention || "20m × 3", tone: "normal" }
@@ -1813,7 +1812,7 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
       {degradedReason && <Alert type="warning" showIcon message="日志能力已降级" description={degradedReason} />}
 
       <Row gutter={[16, 16]} className="log-workspace">
-        <Col xs={24} lg={7} xl={6}>
+        <Col xs={24} lg={6} xl={5}>
           <ProCard
             className="log-source-card"
             title={<Space size={8}><Server size={16} />服务</Space>}
@@ -1860,7 +1859,6 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
                           onClick={() => toggleContainer(value)}
                         >
                           <Checkbox checked={checked} onChange={() => toggleContainer(value)} onClick={(event) => event.stopPropagation()} />
-                          <span className={`system-dot system-dot-${logContainerTone(item)}`} />
                           <span className="log-source-item-main">
                             <Text strong ellipsis>{item.name}</Text>
                             <Text type="secondary" ellipsis>{logContainerMeta(item)}</Text>
@@ -1876,7 +1874,7 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
             </div>
           </ProCard>
         </Col>
-        <Col xs={24} lg={17} xl={18}>
+        <Col xs={24} lg={18} xl={19}>
           <ProCard
             className="log-console-card"
             title={
@@ -2018,6 +2016,7 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
 function LogRow({ line, keyword, index, onOpen }: { line: LogLine; keyword: string; index: number; onOpen: () => void }) {
   const level = inferLogLevel(line);
   const container = line.container_name || line.container_id || "-";
+  const message = summarizeLogMessage(line.message);
   return (
     <button type="button" className="log-row" onClick={onOpen}>
       <span className="log-row-index">{index + 1}</span>
@@ -2026,7 +2025,7 @@ function LogRow({ line, keyword, index, onOpen }: { line: LogLine; keyword: stri
       <span className="log-row-source" title={`${friendlyLogHostName(line.host_name || line.host)}/${container}`}>
         {container}
       </span>
-      <span className="log-row-message">{renderHighlightedLogMessage(line.message, keyword)}</span>
+      <span className="log-row-message" title={line.message}>{renderHighlightedLogMessage(message, keyword)}</span>
     </button>
   );
 }
@@ -3585,11 +3584,6 @@ function logContainerValue(item: LogContainer): string {
   return `${item.host}|${item.id || item.name}`;
 }
 
-function logContainerLabel(item: LogContainer): string {
-  const state = item.state ? ` · ${item.state}` : "";
-  return `${friendlyLogHostName(item.host_name || item.host)}/${item.name}${state}`;
-}
-
 function defaultLogContainerValues(containers: LogContainer[]): string[] {
   const preferred = containers.filter((item) => {
     const name = `${item.host}/${item.host_name}/${item.name}`.toLowerCase();
@@ -3598,15 +3592,6 @@ function defaultLogContainerValues(containers: LogContainer[]): string[] {
   });
   const pool = preferred.length ? preferred : containers.filter((item) => /(running|up)/i.test(item.state || ""));
   return pool.slice(0, 3).map(logContainerValue);
-}
-
-function logHostOptions(containers: LogContainer[]): { value: string; label: string }[] {
-  const rows = new Map<string, string>();
-  for (const item of containers) {
-    if (!item.host) continue;
-    rows.set(item.host, friendlyLogHostName(item.host_name || item.host));
-  }
-  return Array.from(rows.entries()).map(([value, label]) => ({ value, label }));
 }
 
 function filterLogContainers(containers: LogContainer[], keyword: string): LogContainer[] {
@@ -3649,13 +3634,6 @@ function logContainerSortWeight(item: LogContainer): number {
   return 3;
 }
 
-function logContainerTone(item: LogContainer): "normal" | "warning" | "danger" {
-  const state = `${item.state || ""} ${item.health || ""}`.toLowerCase();
-  if (/exited|dead|unhealthy|error|fail/.test(state)) return "danger";
-  if (/created|paused|restarting|configured/.test(state)) return "warning";
-  return "normal";
-}
-
 function logContainerMeta(item: LogContainer): string {
   const state = [item.state, item.health].filter(Boolean).join(" / ");
   const image = shortImageName(item.image || "");
@@ -3680,14 +3658,6 @@ function isOpaqueLogHostID(value: string): boolean {
   return value.length >= 32 && (value.match(/-/g) || []).length >= 4;
 }
 
-function shortLogStrategyLabel(summary: LogSummaryResponse | null): string {
-  const mode = summary?.mode || "";
-  if (mode === "lightweight") return "轻量日志";
-  if (mode === "observability") return "完整观测";
-  if (mode === "external") return "外部平台";
-  return summary?.label || "加载中";
-}
-
 function logSourceText(source: string): string {
   if (source === "dozzle_mcp") return "Dozzle MCP";
   if (source === "ssh_fallback") return "SSH 兜底";
@@ -3700,15 +3670,6 @@ function logSourceColor(source: string): string {
   if (source === "dozzle_mcp") return "success";
   if (source === "ssh_fallback" || source === "monitoring_fallback") return "gold";
   if (source === "degraded") return "error";
-  return "default";
-}
-
-function logLevelColor(level: string): string {
-  const value = String(level || "").toLowerCase();
-  if (value.includes("error") || value.includes("fatal") || value.includes("panic")) return "red";
-  if (value.includes("warn")) return "gold";
-  if (value.includes("debug") || value.includes("trace")) return "purple";
-  if (value.includes("info")) return "blue";
   return "default";
 }
 
@@ -3731,6 +3692,43 @@ function inferLogLevel(line: LogLine): string {
   if (/\b(debug|trace)\b/.test(message)) return "debug";
   if (/\b(info)\b/.test(message)) return "info";
   return "log";
+}
+
+function summarizeLogMessage(message: string): string {
+  const text = String(message || "").trim();
+  if (!text) return "";
+  if (!text.startsWith("{") && !text.startsWith("[")) return text;
+  try {
+    const payload = JSON.parse(text) as Record<string, unknown>;
+    if (!payload || Array.isArray(payload)) return text;
+    const method = stringField(payload, "method");
+    const path = stringField(payload, "path") || stringField(payload, "uri") || stringField(payload, "url");
+    const status = stringField(payload, "status") || stringField(payload, "status_code");
+    const error = stringField(payload, "error") || stringField(payload, "err");
+    const service = stringField(payload, "service_name") || stringField(payload, "service") || stringField(payload, "app");
+    const duration = stringField(payload, "duration_ms") || stringField(payload, "latency") || stringField(payload, "elapsed");
+    const msg = stringField(payload, "msg") || stringField(payload, "message");
+    const requestID = stringField(payload, "request_id") || stringField(payload, "trace_id");
+    const pieces: string[] = [];
+    if (method || path) pieces.push([method, path].filter(Boolean).join(" "));
+    if (status) pieces.push(`status ${status}`);
+    if (error) pieces.push(`error ${error}`);
+    if (msg && msg !== path) pieces.push(msg);
+    if (service) pieces.push(service);
+    if (duration) pieces.push(`${duration}ms`);
+    if (requestID) pieces.push(`#${requestID.slice(0, 12)}`);
+    return pieces.length ? pieces.join(" · ") : text;
+  } catch {
+    return text;
+  }
+}
+
+function stringField(payload: Record<string, unknown>, key: string): string {
+  const value = payload[key];
+  if (value === null || value === undefined || value === "") return "";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "string") return value.trim();
+  return "";
 }
 
 function renderHighlightedLogMessage(message: string, keyword: string): ReactNode {

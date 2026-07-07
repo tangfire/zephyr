@@ -284,7 +284,7 @@ body {
   display: grid;
   gap: 14px;
   min-height: 0;
-  max-height: 720px;
+  max-height: 700px;
   overflow: auto;
   padding-right: 2px;
 }
@@ -309,8 +309,8 @@ body {
 
 .log-source-item {
   display: grid;
-  grid-template-columns: auto 8px minmax(0, 1fr);
-  gap: 9px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
   align-items: center;
   width: 100%;
   min-width: 0;
@@ -466,8 +466,9 @@ body {
 
 .log-row-message {
   min-width: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .log-row-message mark {
@@ -1657,7 +1658,7 @@ body {
   }
 
   .log-source-list {
-    max-height: 300px;
+    max-height: 245px;
   }
 
   .log-explore-toolbar {
@@ -1709,6 +1710,12 @@ body {
 
   .log-row-message {
     grid-column: 2;
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-word;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 }
 

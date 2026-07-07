@@ -57,6 +57,21 @@ func TestDozzleHostUUIDUsesConfiguredDisplayName(t *testing.T) {
 	}
 }
 
+func TestDozzleSingleOpaqueHostPrefersOperationsHost(t *testing.T) {
+	app := &App{cfg: Config{
+		MonitorHostsJSON: `[
+			{"id":"production","name":"写书猫生产机","role":"production"},
+			{"id":"ops","name":"Peapod 运维/测试构建机","role":"operations"}
+		]`,
+	}}
+	containers := app.dozzleRawContainersToLogContainers([]dozzleContainerRaw{
+		{ID: "abc", Name: "/peapod", Host: "c6c100c7-2f10-4ba7-97d0-d800f76f882f", State: "running"},
+	})
+	if containers[0].HostName != "Peapod 运维/测试构建机" {
+		t.Fatalf("expected operations host display name, got %q", containers[0].HostName)
+	}
+}
+
 func TestDozzleMCPClientCallToolText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/mcp" {
