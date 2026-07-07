@@ -629,16 +629,6 @@ body {
   border-radius: 0;
 }
 
-.deploy-object-searchbar {
-  display: flex;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.deploy-object-searchbar .ant-input-affix-wrapper {
-  width: min(520px, 100%);
-}
-
 .deploy-object-index-card .ant-card-body {
   padding: 0 !important;
 }
@@ -651,6 +641,31 @@ body {
   min-width: 0;
   padding: 14px 16px;
   border-bottom: 1px solid #edf1e9;
+}
+
+.deploy-object-toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 520px) auto auto;
+  gap: 8px;
+  align-items: center;
+  justify-content: end;
+  min-width: 0;
+}
+
+.deploy-object-toolbar .ant-input-affix-wrapper {
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .deploy-object-index-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .deploy-object-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    justify-content: stretch;
+  }
 }
 
 .desktop-deploy-object-index-table .ant-pro-card-body {
@@ -1748,14 +1763,6 @@ body {
     display: none;
   }
 
-  .deploy-object-searchbar {
-    justify-content: stretch;
-  }
-
-  .deploy-object-searchbar .ant-input-affix-wrapper {
-    width: 100%;
-  }
-
   .deploy-object-index-card {
     display: none;
   }
@@ -1770,7 +1777,12 @@ body {
   }
 
   .mobile-deploy-object-list {
-    display: block;
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobile-deploy-object-toolbar-card .ant-card-body {
+    padding: 12px !important;
   }
 
   .mobile-deploy-object-list .ant-list-items {

@@ -100,7 +100,7 @@ function Router() {
 }
 
 function pageFromHash(): string {
-  const value = window.location.hash.replace(/^#\/?/, "").trim();
+  const value = window.location.hash.replace(/^#\/?/, "").trim().split("/")[0] || "overview";
   const allowed = new Set(["overview", "deploy", "pipelines", "monitoring", "logs", "settings", "links", "docs"]);
   return allowed.has(value) ? value : "overview";
 }
@@ -505,9 +505,9 @@ function Shell({ page }: { page: "home" | "docs" }) {
   const failedCount = recentFailedPipelineCount(pipelines, nowMs);
   const navItems = peapodNavItems();
 
-  function navigate(key: string) {
+  function navigate(key: string, section?: string) {
     setActivePage(key);
-    const nextHash = key === "overview" ? "" : `#/${key}`;
+    const nextHash = key === "overview" ? "" : section ? `#/${key}/${section}` : `#/${key}`;
     if (window.location.hash !== nextHash) {
       window.history.pushState(null, "", `${window.location.pathname}${nextHash}`);
     }
@@ -531,6 +531,7 @@ function Shell({ page }: { page: "home" | "docs" }) {
             refreshing={refreshing}
             onRun={openRunTask}
             onRefresh={refreshState}
+            onConfigure={() => navigate("settings", "repos")}
             onCancel={cancelPipeline}
             onInspect={openPipelineSummary}
           />

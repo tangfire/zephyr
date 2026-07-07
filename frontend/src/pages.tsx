@@ -121,6 +121,11 @@ export function peapodNavItems() {
   ];
 }
 
+function settingsSectionFromHash(): string {
+  const parts = window.location.hash.replace(/^#\/?/, "").trim().split("/");
+  return parts[0] === "settings" && parts[1] ? parts[1] : "setup";
+}
+
 function PageIntro({
   title,
   description,
@@ -323,6 +328,7 @@ export function DeployPage({
   refreshing,
   onRun,
   onRefresh,
+  onConfigure,
   onCancel,
   onInspect
 }: {
@@ -337,6 +343,7 @@ export function DeployPage({
   refreshing: boolean;
   onRun: (task: Task) => void;
   onRefresh: () => void;
+  onConfigure: () => void;
   onCancel: (row: Pipeline) => void;
   onInspect: (row: Pipeline) => void;
 }) {
@@ -378,6 +385,7 @@ export function DeployPage({
           onQueryChange={setQuery}
           onSelect={setSelectedID}
           onRun={onRun}
+          onConfigure={onConfigure}
           onCancel={onCancel}
           onInspect={onInspect}
         />
@@ -418,6 +426,7 @@ function DeployObjectConsole({
   onQueryChange,
   onSelect,
   onRun,
+  onConfigure,
   onCancel,
   onInspect
 }: {
@@ -433,6 +442,7 @@ function DeployObjectConsole({
   onQueryChange: (value: string) => void;
   onSelect: (id: string) => void;
   onRun: (task: Task) => void;
+  onConfigure: () => void;
   onCancel: (row: Pipeline) => void;
   onInspect: (row: Pipeline) => void;
 }) {
@@ -456,15 +466,6 @@ function DeployObjectConsole({
         />
       ) : (
         <>
-          <div className="deploy-object-searchbar">
-            <Input
-              allowClear
-              prefix={<Search size={15} />}
-              placeholder="搜索对象、环境、仓库、分支"
-              value={query}
-              onChange={(event) => onQueryChange(event.target.value)}
-            />
-          </div>
           <DeployObjectListTable
             objects={objects}
             allObjects={allObjects}
@@ -475,6 +476,9 @@ function DeployObjectConsole({
             triggeringTaskIDSet={triggeringTaskIDSet}
             onSelect={onSelect}
             onRun={onRun}
+            onConfigure={onConfigure}
+            query={query}
+            onQueryChange={onQueryChange}
           />
           <DeployObjectMobileList
             objects={objects}
@@ -485,6 +489,9 @@ function DeployObjectConsole({
             triggeringTaskIDSet={triggeringTaskIDSet}
             onRun={onRun}
             onSelect={onSelect}
+            query={query}
+            onQueryChange={onQueryChange}
+            onConfigure={onConfigure}
           />
         </>
       )}
@@ -501,7 +508,10 @@ function DeployObjectListTable({
   currentUser,
   triggeringTaskIDSet,
   onSelect,
-  onRun
+  onRun,
+  onConfigure,
+  query,
+  onQueryChange
 }: {
   objects: DeployObject[];
   allObjects: DeployObject[];
@@ -512,6 +522,9 @@ function DeployObjectListTable({
   triggeringTaskIDSet: Set<string>;
   onSelect: (id: string) => void;
   onRun: (task: Task) => void;
+  onConfigure: () => void;
+  query: string;
+  onQueryChange: (value: string) => void;
 }) {
   const columns: ProColumns<DeployObject>[] = [
     {
@@ -569,9 +582,19 @@ function DeployObjectListTable({
       <div className="deploy-object-index-head">
         <Space direction="vertical" size={1} className="table-cell-stack">
           <Text strong>部署对象</Text>
-          <Text type="secondary">点击对象进入状态、构建历史和部署动作。</Text>
+          <Text type="secondary">对象来自仓库、任务、环境和验证规则配置；点击行进入详情。</Text>
         </Space>
-        <Tag>{objects.length}/{allObjects.length}</Tag>
+        <div className="deploy-object-toolbar">
+          <Input
+            allowClear
+            prefix={<Search size={15} />}
+            placeholder="搜索对象、环境、仓库、分支"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+          />
+          <Button icon={<Settings size={15} />} onClick={onConfigure}>配置部署对象</Button>
+          <Tag>{objects.length}/{allObjects.length}</Tag>
+        </div>
       </div>
       <ProTable<DeployObject>
         className="desktop-deploy-object-index-table"
@@ -881,7 +904,10 @@ function DeployObjectMobileList({
   currentUser,
   triggeringTaskIDSet,
   onRun,
-  onSelect
+  onSelect,
+  query,
+  onQueryChange,
+  onConfigure
 }: {
   objects: DeployObject[];
   state: StateResponse;
@@ -891,40 +917,56 @@ function DeployObjectMobileList({
   triggeringTaskIDSet: Set<string>;
   onRun: (task: Task) => void;
   onSelect: (id: string) => void;
+  query: string;
+  onQueryChange: (value: string) => void;
+  onConfigure: () => void;
 }) {
   return (
-    <List
-      className="mobile-deploy-object-list"
-      dataSource={objects}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署对象" /> }}
-      pagination={objects.length > 8 ? { pageSize: 8, size: "small" } : false}
-      renderItem={(item) => (
-        <List.Item>
-          <Space direction="vertical" size={10} className="side-stack">
-            <List.Item.Meta
-              title={
-                <Space wrap>
-                  <Text strong>{item.title}</Text>
-                  <DeployObjectStateTags item={item} />
-                </Space>
-              }
-              description={
-                <Space direction="vertical" size={4} className="side-stack">
-                  <Text type="secondary">{item.subtitle}</Text>
-                  <Text type="secondary">{item.environmentLabel} · {item.branchLabel}</Text>
-                  <DeployObjectVersionCell item={item} nowMs={nowMs} state={state} />
-                  <DeployObjectPipelineOverview row={item.pipelines[0]} nowMs={nowMs} />
-                </Space>
-              }
-            />
-            <Space size={8} wrap>
-              <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
-              <Button size="small" onClick={() => onSelect(item.id)}>详情</Button>
+    <div className="mobile-deploy-object-list">
+      <Card className="mobile-deploy-object-toolbar-card">
+        <Space direction="vertical" size={10} className="side-stack">
+          <Input
+            allowClear
+            prefix={<Search size={15} />}
+            placeholder="搜索对象、环境、仓库、分支"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+          />
+          <Button block icon={<Settings size={15} />} onClick={onConfigure}>配置部署对象</Button>
+        </Space>
+      </Card>
+      <List
+        dataSource={objects}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署对象" /> }}
+        pagination={objects.length > 8 ? { pageSize: 8, size: "small" } : false}
+        renderItem={(item) => (
+          <List.Item>
+            <Space direction="vertical" size={10} className="side-stack">
+              <List.Item.Meta
+                title={
+                  <Space wrap>
+                    <Text strong>{item.title}</Text>
+                    <DeployObjectStateTags item={item} />
+                  </Space>
+                }
+                description={
+                  <Space direction="vertical" size={4} className="side-stack">
+                    <Text type="secondary">{item.subtitle}</Text>
+                    <Text type="secondary">{item.environmentLabel} · {item.branchLabel}</Text>
+                    <DeployObjectVersionCell item={item} nowMs={nowMs} state={state} />
+                    <DeployObjectPipelineOverview row={item.pipelines[0]} nowMs={nowMs} />
+                  </Space>
+                }
+              />
+              <Space size={8} wrap>
+                <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
+                <Button size="small" onClick={() => onSelect(item.id)}>详情</Button>
+              </Space>
             </Space>
-          </Space>
-        </List.Item>
-      )}
-    />
+          </List.Item>
+        )}
+      />
+    </div>
   );
 }
 
@@ -1140,7 +1182,7 @@ export function SettingsPage({
 }) {
   const screens = Grid.useBreakpoint();
   const compactSettingsNav = !screens.md;
-  const [activeSetting, setActiveSetting] = useState("setup");
+  const [activeSetting, setActiveSetting] = useState(() => settingsSectionFromHash());
   const settingItems = [
     {
       key: "setup",
@@ -1198,6 +1240,28 @@ export function SettingsPage({
     { key: "docs", label: "参数文档", shortLabel: "文档", children: <Docs state={state} compact /> }
   ];
   const activeSettingItem = settingItems.find((item) => item.key === activeSetting) || settingItems[0];
+  useEffect(() => {
+    function syncSettingsSection() {
+      const next = settingsSectionFromHash();
+      if (settingItems.some((item) => item.key === next)) {
+        setActiveSetting(next);
+      }
+    }
+    syncSettingsSection();
+    window.addEventListener("hashchange", syncSettingsSection);
+    window.addEventListener("popstate", syncSettingsSection);
+    return () => {
+      window.removeEventListener("hashchange", syncSettingsSection);
+      window.removeEventListener("popstate", syncSettingsSection);
+    };
+  }, []);
+  function changeSetting(key: string) {
+    setActiveSetting(key);
+    const nextHash = `#/settings/${key}`;
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(null, "", `${window.location.pathname}${nextHash}`);
+    }
+  }
   return (
     <Space direction="vertical" size={16} className="side-stack">
       <PageIntro
@@ -1212,7 +1276,7 @@ export function SettingsPage({
               <Select
                 className="full-width"
                 value={activeSetting}
-                onChange={setActiveSetting}
+                onChange={changeSetting}
                 options={settingItems.map((item) => ({ value: item.key, label: item.label }))}
               />
             </Space>
@@ -1223,7 +1287,7 @@ export function SettingsPage({
         <Tabs
           className="settings-tabs"
           activeKey={activeSetting}
-          onChange={setActiveSetting}
+          onChange={changeSetting}
           items={settingItems.map((item) => ({
             key: item.key,
             label: item.shortLabel,
@@ -3843,7 +3907,7 @@ function TaskConfigView({
 }) {
   return (
     <Card
-      title="持久化任务配置"
+      title="部署对象配置"
       extra={
         <Button type="primary" icon={<Plus size={16} />} onClick={onAdd}>
           新增任务
@@ -3851,7 +3915,7 @@ function TaskConfigView({
       }
     >
       <div className="config-task-summary">
-        <Text type="secondary">已保存覆盖/自定义 {config?.tasks?.length || 0} 个；默认分支和变量在这里维护，临时执行分支在部署确认时选择。</Text>
+        <Text type="secondary">部署页对象由仓库、任务、环境、变量和验证规则组成；已保存覆盖/自定义 {config?.tasks?.length || 0} 个。</Text>
       </div>
       <Table
         className="config-task-table"
