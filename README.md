@@ -106,6 +106,7 @@ For daily use, prefer the Settings page:
 
 - [Architecture](docs/ops-architecture.md): how Peapod, Woodpecker, Beszel, Grafana, Loki, and managed machines fit together.
 - [Component Profiles](docs/component-profiles.md): choose the lightweight or full observability stack.
+- [Logging Standard](docs/logging-standard.md): structured JSON fields for services that Peapod can search and filter reliably.
 - [Migration Runbook](docs/migration-runbook.md): how to move Peapod to a dedicated operations/build machine and connect production or test hosts.
 
 ## Required Secrets

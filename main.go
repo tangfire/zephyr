@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const cookieName = "peapod_session"
@@ -41,42 +42,46 @@ type sessionPayload struct {
 }
 
 type Config struct {
-	Addr                  string
-	ConfigPath            string
-	PublicURL             string
-	Password              string
-	SessionSecret         string
-	DBDSN                 string
-	BootstrapUsername     string
-	BootstrapPassword     string
-	BootstrapDisplayName  string
-	BootstrapEmail        string
-	WoodpeckerServer      string
-	WoodpeckerPublicURL   string
-	WoodpeckerToken       string
-	BeszelBaseURL         string
-	BeszelPublicURL       string
-	BeszelEmail           string
-	BeszelPassword        string
-	DozzleBaseURL         string
-	DozzlePublicURL       string
-	DozzleUsername        string
-	DozzlePassword        string
-	GrafanaPublicURL      string
-	LogStrategy           string
-	DockerLogMaxSize      string
-	DockerLogMaxFile      string
-	AlertWebhookURL       string
-	ExternalLinksJSON     string
-	MonitorHostsJSON      string
-	MonitorSSHKeyPath     string
-	MonitorRefreshSeconds int
-	MonitorWarnDisk       int
-	MonitorCritDisk       int
-	MonitorWarnMemory     int
-	AuditPath             string
-	TasksPath             string
-	FrontendDir           string
+	Addr                          string
+	AppEnv                        string
+	LogLevel                      string
+	AccessLogMode                 string
+	AccessLogSlowThresholdSeconds int
+	ConfigPath                    string
+	PublicURL                     string
+	Password                      string
+	SessionSecret                 string
+	DBDSN                         string
+	BootstrapUsername             string
+	BootstrapPassword             string
+	BootstrapDisplayName          string
+	BootstrapEmail                string
+	WoodpeckerServer              string
+	WoodpeckerPublicURL           string
+	WoodpeckerToken               string
+	BeszelBaseURL                 string
+	BeszelPublicURL               string
+	BeszelEmail                   string
+	BeszelPassword                string
+	DozzleBaseURL                 string
+	DozzlePublicURL               string
+	DozzleUsername                string
+	DozzlePassword                string
+	GrafanaPublicURL              string
+	LogStrategy                   string
+	DockerLogMaxSize              string
+	DockerLogMaxFile              string
+	AlertWebhookURL               string
+	ExternalLinksJSON             string
+	MonitorHostsJSON              string
+	MonitorSSHKeyPath             string
+	MonitorRefreshSeconds         int
+	MonitorWarnDisk               int
+	MonitorCritDisk               int
+	MonitorWarnMemory             int
+	AuditPath                     string
+	TasksPath                     string
+	FrontendDir                   string
 }
 
 type RuntimeConfigFile struct {
@@ -512,12 +517,22 @@ var tasks = []Task{}
 
 func main() {
 	cfg := loadConfig()
+	logger, cleanupLogger, err := initAppLogger(cfg)
+	if err != nil {
+		panic(err)
+	}
+	defer cleanupLogger()
+	if runtimeCfg, err := loadRuntimeConfigFile(cfg.ConfigPath); err == nil {
+		applyRuntimeConfig(&cfg, runtimeCfg)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		logger.Warn("load runtime config failed", zap.Error(err))
+	}
 	if err := cfg.validate(); err != nil {
-		log.Fatal(err)
+		logger.Fatal("invalid configuration", zap.Error(err))
 	}
 	store, err := OpenUserStore(context.Background(), cfg)
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal("open user store failed", zap.Error(err))
 	}
 	if store != nil {
 		defer store.Close()
@@ -560,11 +575,13 @@ func main() {
 	})
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           securityHeaders(mux),
+		Handler:           accessLogMiddleware(logger, cfg, securityHeaders(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	log.Printf("%s listening on %s", productName, cfg.Addr)
-	log.Fatal(server.ListenAndServe())
+	logger.Info("Peapod listening", zap.String("addr", cfg.Addr))
+	if err := server.ListenAndServe(); err != nil {
+		logger.Fatal("server stopped", zap.Error(err))
+	}
 }
 
 type App struct {
@@ -576,47 +593,46 @@ type App struct {
 
 func loadConfig() Config {
 	cfg := Config{
-		Addr:                  envFirst(":8095", "PEAPOD_ADDR", "ZEPHYR_ADDR", "ZEFIRE_ADDR"),
-		ConfigPath:            envFirst("/data/config.json", "PEAPOD_CONFIG_PATH", "ZEPHYR_CONFIG_PATH", "ZEFIRE_CONFIG_PATH"),
-		PublicURL:             strings.TrimRight(envFirst("http://127.0.0.1:8095", "PEAPOD_PUBLIC_URL", "ZEPHYR_PUBLIC_URL", "ZEFIRE_PUBLIC_URL"), "/"),
-		Password:              envFirst("", "PEAPOD_PASSWORD", "ZEPHYR_PASSWORD", "ZEFIRE_PASSWORD"),
-		SessionSecret:         envFirst("", "PEAPOD_SESSION_SECRET", "ZEPHYR_SESSION_SECRET", "ZEFIRE_SESSION_SECRET"),
-		DBDSN:                 envFirst("", "PEAPOD_DB_DSN", "ZEPHYR_DB_DSN", "ZEFIRE_DB_DSN"),
-		BootstrapUsername:     envFirst("admin", "PEAPOD_BOOTSTRAP_USERNAME", "ZEPHYR_BOOTSTRAP_USERNAME", "ZEFIRE_BOOTSTRAP_USERNAME"),
-		BootstrapPassword:     envFirst("", "PEAPOD_BOOTSTRAP_PASSWORD", "ZEPHYR_BOOTSTRAP_PASSWORD", "ZEFIRE_BOOTSTRAP_PASSWORD"),
-		BootstrapDisplayName:  envFirst("管理员", "PEAPOD_BOOTSTRAP_DISPLAY_NAME", "ZEPHYR_BOOTSTRAP_DISPLAY_NAME", "ZEFIRE_BOOTSTRAP_DISPLAY_NAME"),
-		BootstrapEmail:        envFirst("", "PEAPOD_BOOTSTRAP_EMAIL", "ZEPHYR_BOOTSTRAP_EMAIL", "ZEFIRE_BOOTSTRAP_EMAIL"),
-		WoodpeckerServer:      strings.TrimRight(env("WOODPECKER_SERVER", "http://127.0.0.1:8000"), "/"),
-		WoodpeckerPublicURL:   strings.TrimRight(env("WOODPECKER_PUBLIC_URL", env("WOODPECKER_SERVER", "http://127.0.0.1:8000")), "/"),
-		WoodpeckerToken:       env("WOODPECKER_TOKEN", ""),
-		BeszelBaseURL:         strings.TrimRight(envFirst("http://beszel:8090", "PEAPOD_BESZEL_BASE_URL", "ZEPHYR_BESZEL_BASE_URL", "ZEFIRE_BESZEL_BASE_URL"), "/"),
-		BeszelPublicURL:       strings.TrimRight(envFirst("http://127.0.0.1:8090", "PEAPOD_BESZEL_PUBLIC_URL", "ZEPHYR_BESZEL_PUBLIC_URL", "ZEFIRE_BESZEL_PUBLIC_URL"), "/"),
-		BeszelEmail:           envFirst("", "PEAPOD_BESZEL_EMAIL", "ZEPHYR_BESZEL_EMAIL", "ZEFIRE_BESZEL_EMAIL"),
-		BeszelPassword:        envFirst("", "PEAPOD_BESZEL_PASSWORD", "ZEPHYR_BESZEL_PASSWORD", "ZEFIRE_BESZEL_PASSWORD"),
-		DozzleBaseURL:         strings.TrimRight(envFirst("http://dozzle:8080", "PEAPOD_DOZZLE_BASE_URL", "ZEPHYR_DOZZLE_BASE_URL", "ZEFIRE_DOZZLE_BASE_URL"), "/"),
-		DozzlePublicURL:       strings.TrimRight(firstNonEmptyString(envFirst("", "PEAPOD_DOZZLE_PUBLIC_URL", "ZEPHYR_DOZZLE_PUBLIC_URL", "ZEFIRE_DOZZLE_PUBLIC_URL"), env("DOZZLE_PUBLIC_URL", "")), "/"),
-		DozzleUsername:        envFirst("", "PEAPOD_DOZZLE_USERNAME", "ZEPHYR_DOZZLE_USERNAME", "ZEFIRE_DOZZLE_USERNAME", "DOZZLE_USERNAME"),
-		DozzlePassword:        envFirst("", "PEAPOD_DOZZLE_PASSWORD", "ZEPHYR_DOZZLE_PASSWORD", "ZEFIRE_DOZZLE_PASSWORD", "DOZZLE_PASSWORD"),
-		GrafanaPublicURL:      strings.TrimRight(envFirst("", "PEAPOD_GRAFANA_PUBLIC_URL", "ZEPHYR_GRAFANA_PUBLIC_URL", "ZEFIRE_GRAFANA_PUBLIC_URL"), "/"),
-		LogStrategy:           normalizeLogStrategy(envFirst("lightweight", "PEAPOD_LOG_STRATEGY", "ZEPHYR_LOG_STRATEGY", "ZEFIRE_LOG_STRATEGY")),
-		DockerLogMaxSize:      fallbackText(env("DOCKER_LOG_MAX_SIZE", ""), "20m"),
-		DockerLogMaxFile:      fallbackText(env("DOCKER_LOG_MAX_FILE", ""), "3"),
-		AlertWebhookURL:       envFirst("", "PEAPOD_ALERT_WEBHOOK_URL", "ZEPHYR_ALERT_WEBHOOK_URL", "ZEFIRE_ALERT_WEBHOOK_URL"),
-		ExternalLinksJSON:     envFirst("", "PEAPOD_LINKS_JSON", "ZEPHYR_LINKS_JSON", "ZEFIRE_LINKS_JSON"),
-		MonitorHostsJSON:      envFirst("", "PEAPOD_MONITOR_HOSTS_JSON", "ZEPHYR_MONITOR_HOSTS_JSON", "ZEFIRE_MONITOR_HOSTS_JSON"),
-		MonitorSSHKeyPath:     envFirst("/data/ssh/monitor_ed25519", "PEAPOD_MONITOR_SSH_KEY_PATH", "ZEPHYR_MONITOR_SSH_KEY_PATH", "ZEFIRE_MONITOR_SSH_KEY_PATH"),
-		MonitorRefreshSeconds: envIntFirst(20, "PEAPOD_MONITOR_REFRESH_SECONDS", "ZEPHYR_MONITOR_REFRESH_SECONDS", "ZEFIRE_MONITOR_REFRESH_SECONDS"),
-		MonitorWarnDisk:       envIntFirst(80, "PEAPOD_MONITOR_WARN_DISK", "ZEPHYR_MONITOR_WARN_DISK", "ZEFIRE_MONITOR_WARN_DISK"),
-		MonitorCritDisk:       envIntFirst(90, "PEAPOD_MONITOR_CRIT_DISK", "ZEPHYR_MONITOR_CRIT_DISK", "ZEFIRE_MONITOR_CRIT_DISK"),
-		MonitorWarnMemory:     envIntFirst(80, "PEAPOD_MONITOR_WARN_MEMORY", "ZEPHYR_MONITOR_WARN_MEMORY", "ZEFIRE_MONITOR_WARN_MEMORY"),
-		AuditPath:             envFirst("/data/audit.jsonl", "PEAPOD_AUDIT_PATH", "ZEPHYR_AUDIT_PATH", "ZEFIRE_AUDIT_PATH"),
-		TasksPath:             envFirst("/data/tasks.json", "PEAPOD_TASKS_PATH", "ZEPHYR_TASKS_PATH", "ZEFIRE_TASKS_PATH"),
-		FrontendDir:           envFirst("frontend/dist", "PEAPOD_FRONTEND_DIR", "ZEPHYR_FRONTEND_DIR", "ZEFIRE_FRONTEND_DIR"),
-	}
-	if runtimeCfg, err := loadRuntimeConfigFile(cfg.ConfigPath); err == nil {
-		applyRuntimeConfig(&cfg, runtimeCfg)
-	} else if !errors.Is(err, os.ErrNotExist) {
-		log.Printf("load runtime config failed: %v", err)
+		Addr:                          envFirst(":8095", "PEAPOD_ADDR", "ZEPHYR_ADDR", "ZEFIRE_ADDR"),
+		AppEnv:                        envFirst("production", "PEAPOD_APP_ENV", "APP_ENV"),
+		LogLevel:                      envFirst("info", "PEAPOD_LOG_LEVEL", "LOG_LEVEL"),
+		AccessLogMode:                 envFirst("attention", "PEAPOD_ACCESS_LOG_MODE", "ACCESS_LOG_MODE"),
+		AccessLogSlowThresholdSeconds: envIntFirst(3, "PEAPOD_ACCESS_LOG_SLOW_THRESHOLD_SECONDS", "ACCESS_LOG_SLOW_THRESHOLD_SECONDS"),
+		ConfigPath:                    envFirst("/data/config.json", "PEAPOD_CONFIG_PATH", "ZEPHYR_CONFIG_PATH", "ZEFIRE_CONFIG_PATH"),
+		PublicURL:                     strings.TrimRight(envFirst("http://127.0.0.1:8095", "PEAPOD_PUBLIC_URL", "ZEPHYR_PUBLIC_URL", "ZEFIRE_PUBLIC_URL"), "/"),
+		Password:                      envFirst("", "PEAPOD_PASSWORD", "ZEPHYR_PASSWORD", "ZEFIRE_PASSWORD"),
+		SessionSecret:                 envFirst("", "PEAPOD_SESSION_SECRET", "ZEPHYR_SESSION_SECRET", "ZEFIRE_SESSION_SECRET"),
+		DBDSN:                         envFirst("", "PEAPOD_DB_DSN", "ZEPHYR_DB_DSN", "ZEFIRE_DB_DSN"),
+		BootstrapUsername:             envFirst("admin", "PEAPOD_BOOTSTRAP_USERNAME", "ZEPHYR_BOOTSTRAP_USERNAME", "ZEFIRE_BOOTSTRAP_USERNAME"),
+		BootstrapPassword:             envFirst("", "PEAPOD_BOOTSTRAP_PASSWORD", "ZEPHYR_BOOTSTRAP_PASSWORD", "ZEFIRE_BOOTSTRAP_PASSWORD"),
+		BootstrapDisplayName:          envFirst("管理员", "PEAPOD_BOOTSTRAP_DISPLAY_NAME", "ZEPHYR_BOOTSTRAP_DISPLAY_NAME", "ZEFIRE_BOOTSTRAP_DISPLAY_NAME"),
+		BootstrapEmail:                envFirst("", "PEAPOD_BOOTSTRAP_EMAIL", "ZEPHYR_BOOTSTRAP_EMAIL", "ZEFIRE_BOOTSTRAP_EMAIL"),
+		WoodpeckerServer:              strings.TrimRight(env("WOODPECKER_SERVER", "http://127.0.0.1:8000"), "/"),
+		WoodpeckerPublicURL:           strings.TrimRight(env("WOODPECKER_PUBLIC_URL", env("WOODPECKER_SERVER", "http://127.0.0.1:8000")), "/"),
+		WoodpeckerToken:               env("WOODPECKER_TOKEN", ""),
+		BeszelBaseURL:                 strings.TrimRight(envFirst("http://beszel:8090", "PEAPOD_BESZEL_BASE_URL", "ZEPHYR_BESZEL_BASE_URL", "ZEFIRE_BESZEL_BASE_URL"), "/"),
+		BeszelPublicURL:               strings.TrimRight(envFirst("http://127.0.0.1:8090", "PEAPOD_BESZEL_PUBLIC_URL", "ZEPHYR_BESZEL_PUBLIC_URL", "ZEFIRE_BESZEL_PUBLIC_URL"), "/"),
+		BeszelEmail:                   envFirst("", "PEAPOD_BESZEL_EMAIL", "ZEPHYR_BESZEL_EMAIL", "ZEFIRE_BESZEL_EMAIL"),
+		BeszelPassword:                envFirst("", "PEAPOD_BESZEL_PASSWORD", "ZEPHYR_BESZEL_PASSWORD", "ZEFIRE_BESZEL_PASSWORD"),
+		DozzleBaseURL:                 strings.TrimRight(envFirst("http://dozzle:8080", "PEAPOD_DOZZLE_BASE_URL", "ZEPHYR_DOZZLE_BASE_URL", "ZEFIRE_DOZZLE_BASE_URL"), "/"),
+		DozzlePublicURL:               strings.TrimRight(firstNonEmptyString(envFirst("", "PEAPOD_DOZZLE_PUBLIC_URL", "ZEPHYR_DOZZLE_PUBLIC_URL", "ZEFIRE_DOZZLE_PUBLIC_URL"), env("DOZZLE_PUBLIC_URL", "")), "/"),
+		DozzleUsername:                envFirst("", "PEAPOD_DOZZLE_USERNAME", "ZEPHYR_DOZZLE_USERNAME", "ZEFIRE_DOZZLE_USERNAME", "DOZZLE_USERNAME"),
+		DozzlePassword:                envFirst("", "PEAPOD_DOZZLE_PASSWORD", "ZEPHYR_DOZZLE_PASSWORD", "ZEFIRE_DOZZLE_PASSWORD", "DOZZLE_PASSWORD"),
+		GrafanaPublicURL:              strings.TrimRight(envFirst("", "PEAPOD_GRAFANA_PUBLIC_URL", "ZEPHYR_GRAFANA_PUBLIC_URL", "ZEFIRE_GRAFANA_PUBLIC_URL"), "/"),
+		LogStrategy:                   normalizeLogStrategy(envFirst("lightweight", "PEAPOD_LOG_STRATEGY", "ZEPHYR_LOG_STRATEGY", "ZEFIRE_LOG_STRATEGY")),
+		DockerLogMaxSize:              fallbackText(env("DOCKER_LOG_MAX_SIZE", ""), "20m"),
+		DockerLogMaxFile:              fallbackText(env("DOCKER_LOG_MAX_FILE", ""), "3"),
+		AlertWebhookURL:               envFirst("", "PEAPOD_ALERT_WEBHOOK_URL", "ZEPHYR_ALERT_WEBHOOK_URL", "ZEFIRE_ALERT_WEBHOOK_URL"),
+		ExternalLinksJSON:             envFirst("", "PEAPOD_LINKS_JSON", "ZEPHYR_LINKS_JSON", "ZEFIRE_LINKS_JSON"),
+		MonitorHostsJSON:              envFirst("", "PEAPOD_MONITOR_HOSTS_JSON", "ZEPHYR_MONITOR_HOSTS_JSON", "ZEFIRE_MONITOR_HOSTS_JSON"),
+		MonitorSSHKeyPath:             envFirst("/data/ssh/monitor_ed25519", "PEAPOD_MONITOR_SSH_KEY_PATH", "ZEPHYR_MONITOR_SSH_KEY_PATH", "ZEFIRE_MONITOR_SSH_KEY_PATH"),
+		MonitorRefreshSeconds:         envIntFirst(20, "PEAPOD_MONITOR_REFRESH_SECONDS", "ZEPHYR_MONITOR_REFRESH_SECONDS", "ZEFIRE_MONITOR_REFRESH_SECONDS"),
+		MonitorWarnDisk:               envIntFirst(80, "PEAPOD_MONITOR_WARN_DISK", "ZEPHYR_MONITOR_WARN_DISK", "ZEFIRE_MONITOR_WARN_DISK"),
+		MonitorCritDisk:               envIntFirst(90, "PEAPOD_MONITOR_CRIT_DISK", "ZEPHYR_MONITOR_CRIT_DISK", "ZEFIRE_MONITOR_CRIT_DISK"),
+		MonitorWarnMemory:             envIntFirst(80, "PEAPOD_MONITOR_WARN_MEMORY", "ZEPHYR_MONITOR_WARN_MEMORY", "ZEFIRE_MONITOR_WARN_MEMORY"),
+		AuditPath:                     envFirst("/data/audit.jsonl", "PEAPOD_AUDIT_PATH", "ZEPHYR_AUDIT_PATH", "ZEFIRE_AUDIT_PATH"),
+		TasksPath:                     envFirst("/data/tasks.json", "PEAPOD_TASKS_PATH", "ZEPHYR_TASKS_PATH", "ZEFIRE_TASKS_PATH"),
+		FrontendDir:                   envFirst("frontend/dist", "PEAPOD_FRONTEND_DIR", "ZEPHYR_FRONTEND_DIR", "ZEFIRE_FRONTEND_DIR"),
 	}
 	return cfg
 }
@@ -4144,7 +4160,7 @@ func (a *App) extraExternalLinks() []ExternalLinkConfig {
 	}
 	var values map[string]string
 	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		log.Printf("parse PEAPOD_LINKS_JSON failed: %v", err)
+		zap.L().Warn("parse PEAPOD_LINKS_JSON failed", zap.String("event", "peapod_links_parse_failed"), zap.Error(err))
 		return nil
 	}
 	rows = make([]ExternalLinkConfig, 0, len(values))
@@ -4200,7 +4216,7 @@ func (a *App) configuredTasks() []Task {
 	}
 	custom, err := a.loadCustomTaskConfig()
 	if err != nil {
-		log.Printf("load custom tasks failed: %v", err)
+		zap.L().Warn("load custom tasks failed", zap.String("event", "custom_tasks_load_failed"), zap.Error(err))
 		return out
 	}
 	for _, task := range custom.Tasks {
