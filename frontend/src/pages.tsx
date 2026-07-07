@@ -396,7 +396,7 @@ export function DeployPage({
 
 type DeployObject = {
   id: string;
-  kind: "deployment" | "action";
+  kind: "deployment";
   title: string;
   subtitle: string;
   environmentLabel: string;
@@ -581,18 +581,18 @@ function DeployObjectListTable({
     <Card className="deploy-object-index-card">
       <div className="deploy-object-index-head">
         <Space direction="vertical" size={1} className="table-cell-stack">
-          <Text strong>部署对象</Text>
-          <Text type="secondary">对象来自仓库、任务、环境和验证规则配置；点击行进入详情。</Text>
+          <Text strong>部署项目</Text>
+          <Text type="secondary">这里只展示可上线的项目/环境；清理、重启、状态检查放在维护动作里。</Text>
         </Space>
         <div className="deploy-object-toolbar">
           <Input
             allowClear
             prefix={<Search size={15} />}
-            placeholder="搜索对象、环境、仓库、分支"
+            placeholder="搜索项目、环境、仓库、分支"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
           />
-          <Button icon={<Settings size={15} />} onClick={onConfigure}>配置部署对象</Button>
+          <Button icon={<Settings size={15} />} onClick={onConfigure}>配置部署项目</Button>
           <Tag>{objects.length}/{allObjects.length}</Tag>
         </div>
       </div>
@@ -602,7 +602,7 @@ function DeployObjectListTable({
         size="small"
         columns={columns}
         dataSource={objects}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署对象" /> }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署项目" /> }}
         search={false}
         options={false}
         tableAlertRender={false}
@@ -619,7 +619,7 @@ function DeployObjectStateTags({ item }: { item: DeployObject }) {
   const latest = item.pipelines[0];
   return (
     <>
-      <Tag color={item.kind === "deployment" ? "blue" : riskColors[item.risk] || "default"}>{item.kind === "deployment" ? "部署" : "动作"}</Tag>
+      <Tag color="blue">项目</Tag>
       <Tag color={item.statusColor}>{item.statusLabel}</Tag>
       {latest && ["running", "pending"].includes(latest.status) && <Tag color="processing">#{latest.number} {statusText(latest.status)}</Tag>}
       {item.attention && !["running", "pending"].includes(latest?.status || "") && <Tag color={item.risk === "danger" ? "red" : "gold"}>需关注</Tag>}
@@ -663,7 +663,7 @@ function DeployObjectDetailView({
           <div className="deploy-object-detail-title">
             <Space size={8} wrap>
               <DeployObjectHealthMark item={item} />
-              <Tag color={item.kind === "deployment" ? "blue" : riskColors[item.risk] || "default"}>{item.kind === "deployment" ? "部署对象" : "维护动作"}</Tag>
+              <Tag color="blue">部署项目</Tag>
               {item.attention && <Tag color={item.risk === "danger" ? "red" : "gold"}>需处理</Tag>}
               {latest && <Tag color={statusColors[latest.status] || "default"}>#{latest.number} {statusText(latest.status)}</Tag>}
             </Space>
@@ -728,9 +728,11 @@ function DeployObjectStatusStrip({ item, state, nowMs }: { item: DeployObject; s
   const latest = item.pipelines[0];
   const latestText = latest ? `#${latest.number} · ${statusText(latest.status)} · ${latest.branch || "-"} · ${(latest.commit || "").slice(0, 8) || "-"}` : "暂无流水线";
   const branchText = item.deployment?.configured_branch || item.primaryTask?.branch || "main";
+  const versionLabel = item.deployment ? "线上版本" : "部署目标";
+  const versionValue = item.deployment ? deploymentVersionText(item.deployment, nowMs) : item.primaryTask ? `${repoName(state, item.primaryTask)} · 默认 ${branchText}` : "-";
   return (
     <div className="deploy-object-status-strip">
-      <DeployObjectMetric label={item.kind === "deployment" ? "线上版本" : "默认仓库"} value={item.deployment ? deploymentVersionText(item.deployment, nowMs) : item.primaryTask ? repoName(state, item.primaryTask) : "-"} accent />
+      <DeployObjectMetric label={versionLabel} value={versionValue} accent />
       <DeployObjectMetric label="最近尝试" value={latestText} />
       <DeployObjectMetric label="默认分支" value={branchText} />
     </div>
@@ -764,8 +766,8 @@ function DeployObjectVersionCell({ item, state, nowMs }: { item: DeployObject; s
   if (item.primaryTask) {
     return (
       <Space direction="vertical" size={0} className="table-cell-stack">
-        <Text ellipsis={{ tooltip: repoName(state, item.primaryTask) }}>{repoName(state, item.primaryTask)}</Text>
-        <Text type="secondary">{item.primaryTask.branch || "main"}</Text>
+        <Text>未部署</Text>
+        <Text type="secondary" ellipsis={{ tooltip: repoName(state, item.primaryTask) }}>{repoName(state, item.primaryTask)} · 默认 {item.primaryTask.branch || "main"}</Text>
       </Space>
     );
   }
@@ -794,13 +796,13 @@ function DeployObjectRowActions({
             <Button
               size="small"
               type="primary"
-              icon={item.kind === "deployment" ? <Rocket size={14} /> : <Play size={14} />}
+              icon={<Rocket size={14} />}
               danger={item.primaryTask.risk === "danger"}
               loading={triggeringTaskIDSet.has(item.primaryTask.id)}
               disabled={!canRunTask(currentUser, item.primaryTask)}
               onClick={() => onRun(item.primaryTask!)}
             >
-              {item.kind === "deployment" ? "部署" : "执行"}
+              部署
             </Button>
           </span>
         </Tooltip>
@@ -860,7 +862,7 @@ function DeployObjectExpandedPanel({
             </>
           ) : item.primaryTask ? (
             <>
-              <DeployObjectMetric label="维护动作" value={pipelineTaskText(taskToPipelinePreview(state, item.primaryTask))} accent />
+              <DeployObjectMetric label="部署任务" value={pipelineTaskText(taskToPipelinePreview(state, item.primaryTask))} accent />
               <DeployObjectMetric label="默认分支" value={item.primaryTask.branch || "main"} />
               <DeployObjectMetric label="确认词" value={item.primaryTask.confirm_text || "无需确认"} />
               <DeployObjectMetric label="最近流水" value={item.pipelines[0] ? `#${item.pipelines[0].number} · ${statusText(item.pipelines[0].status)}` : "-"} />
@@ -928,16 +930,16 @@ function DeployObjectMobileList({
           <Input
             allowClear
             prefix={<Search size={15} />}
-            placeholder="搜索对象、环境、仓库、分支"
+            placeholder="搜索项目、环境、仓库、分支"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
           />
-          <Button block icon={<Settings size={15} />} onClick={onConfigure}>配置部署对象</Button>
+          <Button block icon={<Settings size={15} />} onClick={onConfigure}>配置部署项目</Button>
         </Space>
       </Card>
       <List
         dataSource={objects}
-        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署对象" /> }}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的部署项目" /> }}
         pagination={objects.length > 8 ? { pageSize: 8, size: "small" } : false}
         renderItem={(item) => (
           <List.Item>
@@ -1211,7 +1213,7 @@ export function SettingsPage({
           {state.current_user.role === "admin" ? <RepositoryConfigPanel state={state} onReload={onReload} /> : <Alert type="info" showIcon message="仓库配置只允许管理员查看和修改" />}
           {state.current_user.role === "admin" && state.configurable && <TaskTemplatePanel state={state} onApplied={onReload} />}
           {state.configurable ? (
-            <TaskConfigView config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
+            <TaskConfigView state={state} config={customConfig} tasks={state.tasks || []} onAdd={onAddTask} onEdit={onEditTask} onDelete={onDeleteTask} />
           ) : (
             <Alert type="info" showIcon message="当前环境未开启任务配置文件" />
           )}
@@ -1346,6 +1348,7 @@ function TaskTable({
   const deploymentTaskIDs = useMemo(() => new Set(deploymentManagedTaskIDs(state.tasks || [], state.deployment_statuses || [])), [state.tasks, state.deployment_statuses]);
   const data = (state.tasks || []).filter((item) => {
     if (item.external_url) return false;
+    if (isDeployProjectTask(item)) return false;
     if (deploymentTaskIDs.has(item.id)) return false;
     if (filters.group && item.group !== filters.group) return false;
     if (filters.repo && String(item.repo_id) !== filters.repo) return false;
@@ -1529,7 +1532,7 @@ function TaskFilters({
   onChange: (value: { group: string; repo: string; risk: string; q: string }) => void;
 }) {
   const deploymentTaskIDs = new Set(deploymentManagedTaskIDs(state.tasks || [], state.deployment_statuses || []));
-  const tasks = (state.tasks || []).filter((item) => !item.external_url && !deploymentTaskIDs.has(item.id));
+  const tasks = (state.tasks || []).filter((item) => !item.external_url && !isDeployProjectTask(item) && !deploymentTaskIDs.has(item.id));
   const groups = Array.from(new Set(tasks.map((item) => item.group).filter(Boolean))).sort();
   const repoIDs = Array.from(new Set(tasks.map((item) => String(item.repo_id)).filter(Boolean))).sort((a, b) => Number(a) - Number(b));
   const update = (patch: Partial<typeof value>) => onChange({ ...value, ...patch });
@@ -3893,39 +3896,189 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
 }
 
 function TaskConfigView({
+  state,
   tasks,
   config,
   onAdd,
   onEdit,
   onDelete
 }: {
+  state: StateResponse;
   tasks: Task[];
   config: TaskConfig | null;
   onAdd: () => void;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
+  const deployProjectRows = Array.from(groupDeployProjectTasks(tasks || []).entries())
+    .map(([projectKey, projectTasks]) => ({ projectKey, projectTasks }))
+    .sort((a, b) => taskProjectDisplayName(a.projectTasks).localeCompare(taskProjectDisplayName(b.projectTasks), "zh-CN"));
+  const unassignedDeployTasks = (tasks || []).filter((task) => !task.external_url && !isDeployProjectTask(task) && isDeploymentLikeTask(task)).sort(taskLibrarySort);
+  const maintenanceTasks = (tasks || []).filter((task) => !task.external_url && !isDeployProjectTask(task) && !isDeploymentLikeTask(task)).sort(taskLibrarySort);
+  const taskActionCell = (task: Task) => (
+    <Space>
+      <Button size="small" icon={<Settings size={14} />} onClick={() => onEdit(task)} />
+      {(task.custom || task.overridden) && (
+        <Popconfirm title={task.overridden ? "恢复这个内置任务的默认配置？" : "删除这个自定义任务？"} onConfirm={() => onDelete(task)}>
+          <Button size="small" icon={<Trash2 size={14} />} />
+        </Popconfirm>
+      )}
+    </Space>
+  );
+
   return (
-    <Card
-      title="部署对象配置"
-      extra={
-        <Button type="primary" icon={<Plus size={16} />} onClick={onAdd}>
-          新增任务
-        </Button>
-      }
-    >
+    <Space direction="vertical" size={14} className="side-stack">
       <div className="config-task-summary">
-        <Text type="secondary">部署页对象由仓库、任务、环境、变量和验证规则组成；已保存覆盖/自定义 {config?.tasks?.length || 0} 个。</Text>
+        <Space direction="vertical" size={4} className="side-stack">
+          <Text strong>部署页只展示项目/环境，不展示单次维护动作。</Text>
+          <Text type="secondary">同一个项目 ID 下的部署、回退、强制部署会归并为一个部署项目；清理磁盘、重启、状态检查保留在维护动作。已保存覆盖/自定义 {config?.tasks?.length || 0} 个。</Text>
+        </Space>
       </div>
+      {unassignedDeployTasks.length > 0 && (
+        <Card title="待归属部署任务">
+          <Alert
+            type="warning"
+            showIcon
+            message="这些任务看起来是部署/发布，但缺少项目 ID"
+            description="补上 PEAPOD_PROJECT_ID 或 ZEPHYR_PROJECT_ID 后，它们会归并到部署页的项目列表里；否则只能作为单次任务保留。"
+          />
+          <Table
+            className="config-task-table"
+            rowKey="id"
+            size="small"
+            pagination={false}
+            dataSource={unassignedDeployTasks}
+            columns={[
+              {
+                title: "任务",
+                render: (_, row) => (
+                  <Space direction="vertical" size={0} className="table-cell-stack">
+                    <Text strong>{productText(row.title)}</Text>
+                    <Text type="secondary" ellipsis={{ tooltip: productText(row.description) }}>{productText(row.description) || "缺少项目归属"}</Text>
+                  </Space>
+                )
+              },
+              { title: "执行仓库", render: (_, row) => repoName(state, row) },
+              { title: "分支", dataIndex: "branch" },
+              {
+                title: "需要补齐",
+                render: () => <Text type="danger">PEAPOD_PROJECT_ID / ZEPHYR_PROJECT_ID</Text>
+              },
+              {
+                title: "",
+                width: 150,
+                render: (_, row) => taskActionCell(row)
+              }
+            ]}
+            scroll={{ x: 760 }}
+          />
+        </Card>
+      )}
+      <Card
+        title="部署项目任务"
+        extra={
+          <Button type="primary" icon={<Plus size={16} />} onClick={onAdd}>
+            新增任务
+          </Button>
+        }
+      >
+        <Table
+          className="config-task-table"
+          rowKey="projectKey"
+          size="small"
+          pagination={false}
+          dataSource={deployProjectRows}
+          locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有配置项目化部署任务" /> }}
+          columns={[
+            {
+              title: "部署项目",
+              width: 260,
+              render: (_, row) => {
+                const primary = preferredDeployTask(row.projectTasks) || row.projectTasks[0];
+                return (
+                  <Space direction="vertical" size={0} className="table-cell-stack">
+                    <Text strong>{taskProjectDisplayName(row.projectTasks)}</Text>
+                    <Text type="secondary" ellipsis={{ tooltip: taskProjectID(primary) }}>{taskProjectID(primary) || "未配置项目 ID"}</Text>
+                  </Space>
+                );
+              }
+            },
+            {
+              title: "环境 / 仓库",
+              width: 260,
+              render: (_, row) => {
+                const primary = preferredDeployTask(row.projectTasks) || row.projectTasks[0];
+                return (
+                  <Space direction="vertical" size={0} className="table-cell-stack">
+                    <Text>{deployObjectEnvironmentLabel(undefined, primary)}</Text>
+                    <Text type="secondary" ellipsis={{ tooltip: repoName(state, primary) }}>{repoName(state, primary)} · {primary.branch || "main"}</Text>
+                  </Space>
+                );
+              }
+            },
+            {
+              title: "可用按钮",
+              width: 250,
+              render: (_, row) => (
+                <Space wrap size={[4, 4]}>
+                  {preferredDeployTask(row.projectTasks) && <Tag color="blue">部署</Tag>}
+                  {row.projectTasks.some(isRollbackTask) && <Tag color="red">回退</Tag>}
+                  {row.projectTasks.some(isForceDeployTask) && <Tag color="gold">强制部署</Tag>}
+                  {row.projectTasks.filter((task) => !isRollbackTask(task) && !isForceDeployTask(task)).slice(1).map((task) => <Tag key={task.id}>{productText(task.title)}</Tag>)}
+                </Space>
+              )
+            },
+            {
+              title: "验证",
+              width: 180,
+              render: (_, row) => {
+                const deploy = preferredDeployTask(row.projectTasks);
+                return deploy ? (
+                  <Text type={taskHasVerification(deploy) ? "secondary" : "danger"}>
+                    {taskHasVerification(deploy) ? "已配置 marker/healthz" : "缺少部署验证"}
+                  </Text>
+                ) : <Text type="secondary">无默认部署任务</Text>;
+              }
+            },
+            {
+              title: "任务来源",
+              render: (_, row) => (
+                <Space direction="vertical" size={4} className="table-cell-stack">
+                  {row.projectTasks.map((task) => (
+                    <Space key={task.id} size={6} wrap>
+                      <Tag>{deployTaskRoleText(task)}</Tag>
+                      <Text ellipsis={{ tooltip: productText(task.title) }}>{productText(task.title)}</Text>
+                      {task.custom && <Tag color="blue">自定义</Tag>}
+                      {task.overridden && <Tag color="gold">已覆盖</Tag>}
+                      {task.disabled && <Tag color="red">不可执行</Tag>}
+                    </Space>
+                  ))}
+                </Space>
+              )
+            },
+            {
+              title: "",
+              width: 130,
+              render: (_, row) => {
+                const primary = preferredDeployTask(row.projectTasks) || row.projectTasks[0];
+                return taskActionCell(primary);
+              }
+            }
+          ]}
+          scroll={{ x: 1080 }}
+        />
+      </Card>
+      <Card title="维护动作" extra={<Button icon={<Plus size={16} />} onClick={onAdd}>新增维护动作</Button>}>
       <Table
         className="config-task-table"
         rowKey="id"
         size="small"
         pagination={false}
-        dataSource={tasks.filter((task) => !task.external_url)}
+        dataSource={maintenanceTasks}
+        locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无维护动作" /> }}
         columns={[
           {
-            title: "任务",
+            title: "维护动作",
             render: (_, row) => (
               <Space direction="vertical" size={0}>
                 <Text strong>{productText(row.title)}</Text>
@@ -3938,8 +4091,8 @@ function TaskConfigView({
               </Space>
             )
           },
-          { title: "模块", dataIndex: "group" },
-          { title: "执行仓库", render: (_, row) => row.repo_name || `Repo ${row.repo_id}` },
+          { title: "场景", render: (_, row) => maintenanceTaskKindText(row) },
+          { title: "执行仓库", render: (_, row) => repoName(state, row) },
           { title: "分支", dataIndex: "branch" },
           {
             title: "配置摘要",
@@ -3950,32 +4103,20 @@ function TaskConfigView({
                     <Tag key={item}>{item}</Tag>
                   ))}
                 </Space>
-                {isDeploymentLikeTask(row) && (
-                  <Text type={taskHasVerification(row) ? "secondary" : "danger"}>
-                    {taskHasVerification(row) ? "已配置 marker/healthz 验证" : "缺少部署验证，不能作为可信入口"}
-                  </Text>
-                )}
+                <Text type="secondary">不会作为部署项目出现在部署页主表。</Text>
               </Space>
             )
           },
           {
             title: "",
             width: 150,
-            render: (_, row) => (
-              <Space>
-                <Button size="small" icon={<Settings size={14} />} onClick={() => onEdit(row)} />
-                {(row.custom || row.overridden) && (
-                  <Popconfirm title={row.overridden ? "恢复这个内置任务的默认配置？" : "删除这个自定义任务？"} onConfirm={() => onDelete(row)}>
-                    <Button size="small" icon={<Trash2 size={14} />} />
-                  </Popconfirm>
-                )}
-              </Space>
-            )
+            render: (_, row) => taskActionCell(row)
           }
         ]}
         scroll={{ x: 760 }}
       />
     </Card>
+    </Space>
   );
 }
 
@@ -4806,7 +4947,6 @@ function commitLooksSame(left?: string, right?: string): boolean {
 
 function buildDeployObjects(state: StateResponse, rows: DeploymentStatus[], tasks: Task[], pipelines: Pipeline[], nowMs: number): DeployObject[] {
   const deploymentRows = sortDeploymentRows(rows || []);
-  const managedTaskIDs = new Set(deploymentManagedTaskIDs(tasks || [], deploymentRows));
   const objects: DeployObject[] = deploymentRows.map((row) => {
     const actions = deploymentActionsForStatus(row, tasks || []);
     const actionTasks = [actions.deploy, actions.rollback, ...actions.extras].filter(Boolean) as Task[];
@@ -4844,47 +4984,68 @@ function buildDeployObjects(state: StateResponse, rows: DeploymentStatus[], task
     };
   });
 
-  const maintenanceObjects = (tasks || [])
-    .filter((task) => !task.external_url && !managedTaskIDs.has(task.id))
-    .sort(taskLibrarySort)
-    .map((task) => {
-      const relatedPipelines = pipelines.filter((pipeline) => pipelineMatchesTask(task, pipeline)).slice(0, 30);
-      const latest = relatedPipelines[0];
-      const attention = task.risk === "danger" || ["failure", "error"].includes(latest?.status || "") || relatedPipelines.some((pipeline) => ["running", "pending"].includes(pipeline.status));
-      return {
-        id: `task:${task.id}`,
-        kind: "action" as const,
-        title: productText(task.title),
-        subtitle: `${taskGroupLabel(state, task)} · ${repoName(state, task)}`,
-        environmentLabel: deployObjectEnvironmentLabel(undefined, task),
-        branchLabel: deployObjectBranchLabel(undefined, task),
-        statusLabel: latest ? statusText(latest.status) : riskLabel(task.risk),
-        statusColor: latest ? statusColors[latest.status] || "default" : riskColors[task.risk] || "default",
-        attention,
-        risk: task.risk,
-        primaryTask: task,
-        extraTasks: [] as Task[],
-        pipelines: relatedPipelines,
-        searchText: [
-          task.id,
-          task.title,
-          task.description,
-          task.group,
-          task.branch,
-          repoName(state, task),
-          variablesText(task.variables)
-        ].join(" ").toLowerCase()
-      };
-    });
+  const existingIDs = new Set(objects.map((item) => item.id));
+  const configuredObjects = Array.from(groupDeployProjectTasks(tasks || []).entries())
+    .filter(([projectKey]) => !existingIDs.has(projectKey))
+    .map(([projectKey, projectTasks]) => buildConfiguredDeployObject(state, projectKey, projectTasks, pipelines));
 
-  return [...objects, ...maintenanceObjects].sort((a, b) => {
+  return [...objects, ...configuredObjects].sort((a, b) => {
     if (a.attention !== b.attention) return a.attention ? -1 : 1;
-    if (a.kind !== b.kind) return a.kind === "deployment" ? -1 : 1;
     const aTime = a.pipelines[0] ? pipelineSortTime(a.pipelines[0]) : 0;
     const bTime = b.pipelines[0] ? pipelineSortTime(b.pipelines[0]) : 0;
     if (aTime !== bTime) return bTime - aTime;
     return a.title.localeCompare(b.title, "zh-CN");
   });
+}
+
+function groupDeployProjectTasks(tasks: Task[]): Map<string, Task[]> {
+  const groups = new Map<string, Task[]>();
+  for (const task of tasks) {
+    if (!isDeployProjectTask(task)) continue;
+    const key = taskProjectKey(task);
+    const current = groups.get(key) || [];
+    current.push(task);
+    groups.set(key, current);
+  }
+  for (const [key, rows] of groups.entries()) {
+    groups.set(key, rows.sort(taskLibrarySort));
+  }
+  return groups;
+}
+
+function buildConfiguredDeployObject(state: StateResponse, projectKey: string, projectTasks: Task[], pipelines: Pipeline[]): DeployObject {
+  const deploy = preferredDeployTask(projectTasks) || projectTasks.find((task) => !isRollbackTask(task)) || projectTasks[0];
+  const rollback = projectTasks.find((task) => isRollbackTask(task));
+  const actionTasks = [deploy, rollback, ...projectTasks.filter((task) => isDeploymentLikeTask(task) && task.id !== deploy?.id && task.id !== rollback?.id)].filter(Boolean) as Task[];
+  const primary = deploy || actionTasks[0] || projectTasks[0];
+  const relatedPipelines = pipelines.filter((pipeline) => actionTasks.some((task) => pipelineMatchesTask(task, pipeline))).slice(0, 30);
+  const latest = relatedPipelines[0];
+  const projectName = taskProjectDisplayName(projectTasks);
+  const attention = ["running", "pending", "failure", "error"].includes(latest?.status || "");
+  return {
+    id: projectKey,
+    kind: "deployment" as const,
+    title: projectName,
+    subtitle: `${taskGroupLabel(state, primary)} · ${repoName(state, primary)}`,
+    environmentLabel: deployObjectEnvironmentLabel(undefined, primary),
+    branchLabel: deployObjectBranchLabel(undefined, primary),
+    statusLabel: latest ? statusText(latest.status) : "未部署",
+    statusColor: latest ? statusColors[latest.status] || "default" : "default",
+    attention,
+    risk: ["failure", "error"].includes(latest?.status || "") ? "danger" : attention ? "warning" : primary.risk,
+    primaryTask: deploy,
+    rollbackTask: rollback,
+    extraTasks: actionTasks.filter((task) => task.id !== deploy?.id && task.id !== rollback?.id),
+    pipelines: relatedPipelines,
+    searchText: [
+      projectName,
+      taskProjectID(primary),
+      primary.group,
+      repoName(state, primary),
+      primary.branch,
+      projectTasks.map((task) => [task.id, task.title, task.description, variablesText(task.variables)].join(" ")).join(" ")
+    ].join(" ").toLowerCase()
+  };
 }
 
 function filterDeployObjects(objects: DeployObject[], query: string): DeployObject[] {
@@ -4971,6 +5132,9 @@ function deploymentActionsForStatus(row: DeploymentStatus, tasks: Task[]): { dep
 
 function deploymentManagedTaskIDs(tasks: Task[], statuses: DeploymentStatus[]): string[] {
   const ids = new Set<string>();
+  for (const task of tasks) {
+    if (isDeployProjectTask(task)) ids.add(task.id);
+  }
   for (const status of statuses) {
     const actions = deploymentActionsForStatus(status, tasks);
     if (actions.deploy) ids.add(actions.deploy.id);
@@ -4998,9 +5162,45 @@ function preferredDeployTask(tasks: Task[]): Task | undefined {
 }
 
 function taskProjectKey(task: Task): string {
-  const variables = task.variables || {};
-  const id = variables.PEAPOD_PROJECT_ID || variables.ZEPHYR_PROJECT_ID || variables.PROJECT_ID || variables.SERVICE_ID || variables.DEPLOY_SERVICE || variables.APP || variables.PROJECT || task.group || task.id;
+  const id = taskProjectID(task) || task.group || task.id;
   return `repo-${task.repo_id}:${normalizeKey(id)}`;
+}
+
+function taskProjectID(task: Task): string {
+  const variables = task.variables || {};
+  return variables.PEAPOD_PROJECT_ID || variables.ZEPHYR_PROJECT_ID || variables.PROJECT_ID || variables.SERVICE_ID || variables.DEPLOY_SERVICE || variables.APP || variables.PROJECT || "";
+}
+
+function taskProjectDisplayName(tasks: Task[]): string {
+  const primary = preferredDeployTask(tasks) || tasks.find((task) => !isRollbackTask(task)) || tasks[0];
+  if (!primary) return "未命名项目";
+  const variables = primary.variables || {};
+  const explicit = variables.PEAPOD_PROJECT_NAME || variables.ZEPHYR_PROJECT_NAME || variables.PROJECT_NAME || variables.SERVICE_NAME || "";
+  if (explicit) return productText(explicit);
+  const deployTitle = productText(primary.title || "").replace(/(强制)?部署|发布|回退|rollback|deploy|release/gi, "").replace(/[·｜|-]+$/g, "").trim();
+  return deployTitle || taskProjectID(primary) || cleanGroupLabel(primary.group) || primary.repo_name || primary.id;
+}
+
+function isDeployProjectTask(task: Task): boolean {
+  if (task.external_url) return false;
+  if (!taskProjectID(task)) return false;
+  return isDeploymentLikeTask(task);
+}
+
+function deployTaskRoleText(task: Task): string {
+  if (isRollbackTask(task)) return "回退";
+  if (isForceDeployTask(task)) return "强制部署";
+  if (isDeploymentLikeTask(task)) return "部署";
+  return "任务";
+}
+
+function maintenanceTaskKindText(task: Task): string {
+  if (isCleanupTask(task)) return "清理";
+  if (isRestartTask(task)) return "重启";
+  const action = String(task.variables?.DEPLOY_ACTION || "").toLowerCase();
+  if (action.includes("status") || /状态|检查|check|status/i.test(task.title)) return "状态检查";
+  if (task.risk === "danger") return "高危操作";
+  return "维护";
 }
 
 function normalizeKey(value: string): string {
