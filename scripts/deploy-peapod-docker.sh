@@ -71,7 +71,9 @@ fi
 tar \
   --exclude '.env' \
   --exclude '.env.host' \
+  --exclude 'docker-compose.override.yml' \
   --exclude 'data' \
+  --exclude '.deploy' \
   --exclude 'frontend/node_modules' \
   --exclude 'frontend/dist' \
   --exclude 'frontend/tsconfig.tsbuildinfo' \
