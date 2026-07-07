@@ -571,10 +571,10 @@ function DeployObjectListTable({
     },
     {
       title: "",
-      width: 160,
+      width: 230,
       fixed: "right",
       render: (_, row) => (
-        <DeployObjectRowActions item={row} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
+        <DeployObjectRowActions item={row} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} onOpenDetail={() => onSelect(row.id)} />
       )
     }
   ];
@@ -623,6 +623,7 @@ function DeployObjectStateTags({ item }: { item: DeployObject }) {
     <>
       <Tag color="blue">项目</Tag>
       <Tag color={item.statusColor}>{item.statusLabel}</Tag>
+      {deployObjectRollbackTask(item) && <Tag color="volcano">可回滚</Tag>}
       {latest && ["running", "pending"].includes(latest.status) && <Tag color="processing">#{latest.number} {statusText(latest.status)}</Tag>}
       {item.attention && !["running", "pending"].includes(latest?.status || "") && <Tag color={item.risk === "danger" ? "red" : "gold"}>需关注</Tag>}
     </>
@@ -841,6 +842,7 @@ function DeployObjectRowActions({
   currentUser,
   triggeringTaskIDSet,
   onRun,
+  onOpenDetail,
   showRollback = false
 }: {
   item: DeployObject;
@@ -848,12 +850,13 @@ function DeployObjectRowActions({
   currentUser: User;
   triggeringTaskIDSet: Set<string>;
   onRun: TaskRunHandler;
+  onOpenDetail?: () => void;
   showRollback?: boolean;
 }) {
   const lastPipeline = item.pipelines[0];
   const rollbackTask = deployObjectRollbackTask(item);
   const rollbackTarget = firstRollbackRevision(item.deployment);
-  const deployBlockedTitle = item.primaryTask ? taskDisabledTitle(currentUser, item.primaryTask) : "没有匹配到这个项目的部署任务，请在设置里补齐项目 ID 和动作配置";
+  const blocked = deployBlockedState(currentUser, item);
   return (
     <Space size={8} onClick={(event) => event.stopPropagation()}>
       {item.primaryTask && canRunTask(currentUser, item.primaryTask) ? (
@@ -873,8 +876,15 @@ function DeployObjectRowActions({
           </span>
         </Tooltip>
       ) : (
-        <Tooltip title={deployBlockedTitle}>
-          <Tag className="deploy-action-placeholder" color={item.primaryTask ? "default" : "gold"}>{item.primaryTask ? "不可执行" : "待配置"}</Tag>
+        <Tooltip title={blocked.title}>
+          <Tag className="deploy-action-placeholder" color={blocked.color}>{blocked.label}</Tag>
+        </Tooltip>
+      )}
+      {onOpenDetail && (
+        <Tooltip title={rollbackTask ? "进入详情选择回滚历史" : "进入详情查看流水线和部署上下文"}>
+          <Button size="small" icon={<ScrollText size={14} />} onClick={onOpenDetail}>
+            {rollbackTask ? "详情/回滚" : "详情"}
+          </Button>
         </Tooltip>
       )}
       {showRollback && rollbackTask && canRunTask(currentUser, rollbackTask) && rollbackTarget && (
@@ -900,6 +910,37 @@ function DeployObjectRowActions({
       {lastPipeline ? <Button size="small" href={pipelineURL(woodpecker, lastPipeline)} target="_blank" icon={<ExternalLink size={14} />} /> : null}
     </Space>
   );
+}
+
+function deployBlockedState(user: User, item: DeployObject): { label: string; title: string; color: string } {
+  const task = item.primaryTask;
+  if (!task) {
+    return {
+      label: "待配置",
+      title: "没有匹配到这个项目的部署任务，请在设置里补齐项目 ID 和动作配置",
+      color: "gold"
+    };
+  }
+  if (task.disabled) {
+    return {
+      label: "已停用",
+      title: task.disabled_reason || "这个部署任务当前被停用",
+      color: "default"
+    };
+  }
+  if (!canRunTask(user, task)) {
+    const roles = task.allowed_roles || [];
+    return {
+      label: roles.includes("admin") ? "仅管理员" : "无权限",
+      title: taskDisabledTitle(user, task) || "当前账号没有权限执行这个部署任务",
+      color: "default"
+    };
+  }
+  return {
+    label: "不可执行",
+    title: taskDisabledTitle(user, task) || "这个部署任务当前不可执行",
+    color: "default"
+  };
 }
 
 function deployObjectRollbackTask(item: DeployObject): Task | undefined {
@@ -1043,7 +1084,7 @@ function DeployObjectMobileList({
               />
               <Space size={8} wrap>
                 <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
-                <Button size="small" onClick={() => onSelect(item.id)}>详情</Button>
+                <Button size="small" icon={<ScrollText size={14} />} onClick={() => onSelect(item.id)}>{deployObjectRollbackTask(item) ? "详情/回滚" : "详情"}</Button>
               </Space>
             </Space>
           </List.Item>
