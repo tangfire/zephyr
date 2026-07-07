@@ -344,8 +344,8 @@ export function DeployPage({
       setSelectedID("");
       return;
     }
-    if (!selectedID || !objects.some((item) => item.id === selectedID)) {
-      setSelectedID(objects[0].id);
+    if (selectedID && !objects.some((item) => item.id === selectedID)) {
+      setSelectedID("");
     }
   }, [objects, selectedID]);
   const filteredObjects = useMemo(() => filterDeployObjects(objects, query, objectFilter), [objects, query, objectFilter]);
@@ -452,170 +452,317 @@ function DeployObjectConsole({
   const attention = allObjects.filter((item) => item.attention).length;
   const deployments = allObjects.filter((item) => item.kind === "deployment").length;
   const actions = allObjects.filter((item) => item.kind === "action").length;
-  const selected = objects.find((item) => item.id === selectedID) || null;
-
-  useEffect(() => {
-    if (!objects.length) return;
-    if (!objects.some((item) => item.id === selectedID)) {
-      onSelect(objects[0].id);
-    }
-  }, [objects, selectedID, onSelect]);
+  const selected = allObjects.find((item) => item.id === selectedID) || null;
 
   return (
     <Space direction="vertical" size={12} className="side-stack">
-      <div className="deploy-object-toolbar">
-        <Segmented
-          size="small"
-          value={filter}
-          onChange={(value) => onFilterChange(value as DeployObjectFilter)}
-          options={[
-            { label: `全部 ${allObjects.length}`, value: "all" },
-            { label: `关注 ${attention}`, value: "attention" },
-            { label: `运行 ${running}`, value: "running" },
-            { label: `项目 ${deployments}`, value: "deployment" },
-            { label: `维护 ${actions}`, value: "action" }
-          ]}
-        />
-        <Input
-          allowClear
-          prefix={<Search size={15} />}
-          placeholder="搜索对象、环境、仓库、分支"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-        />
-      </div>
-      <div className="deploy-console-desktop">
-        <div className="deploy-object-directory" aria-label="部署对象目录">
-          <div className="deploy-object-directory-head">
-            <Space direction="vertical" size={1} className="table-cell-stack">
-              <Text strong>对象目录</Text>
-              <Text type="secondary">项目、环境和维护动作</Text>
-            </Space>
-            <Tag>{objects.length}/{allObjects.length}</Tag>
-          </div>
-          <div className="deploy-object-directory-list">
-            {objects.length ? objects.map((item) => (
-              <DeployObjectDirectoryItem
-                key={item.id}
-                item={item}
-                selected={item.id === selected?.id}
-                nowMs={nowMs}
-                onSelect={() => onSelect(item.id)}
-              />
-            )) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的对象" />
-            )}
-          </div>
-        </div>
-        <DeployObjectWorkbench
+      {selected ? (
+        <DeployObjectDetailView
           item={selected}
           state={state}
           woodpecker={woodpecker}
           nowMs={nowMs}
           currentUser={currentUser}
           triggeringTaskIDSet={triggeringTaskIDSet}
+          onBack={() => onSelect("")}
           onRun={onRun}
           onCancel={onCancel}
           onInspect={onInspect}
         />
-      </div>
-      <DeployObjectMobileList
-        objects={objects}
-        selectedID={selectedID}
-        state={state}
-        woodpecker={woodpecker}
-        nowMs={nowMs}
-        currentUser={currentUser}
-        triggeringTaskIDSet={triggeringTaskIDSet}
-        onRun={onRun}
-        onSelect={onSelect}
-        onCancel={onCancel}
-        onInspect={onInspect}
-      />
+      ) : (
+        <>
+          <div className="deploy-object-toolbar">
+            <Segmented
+              size="small"
+              value={filter}
+              onChange={(value) => onFilterChange(value as DeployObjectFilter)}
+              options={[
+                { label: `全部 ${allObjects.length}`, value: "all" },
+                { label: `关注 ${attention}`, value: "attention" },
+                { label: `运行 ${running}`, value: "running" },
+                { label: `项目 ${deployments}`, value: "deployment" },
+                { label: `维护 ${actions}`, value: "action" }
+              ]}
+            />
+            <Input
+              allowClear
+              prefix={<Search size={15} />}
+              placeholder="搜索对象、环境、仓库、分支"
+              value={query}
+              onChange={(event) => onQueryChange(event.target.value)}
+            />
+          </div>
+          <DeployObjectListTable
+            objects={objects}
+            allObjects={allObjects}
+            state={state}
+            woodpecker={woodpecker}
+            nowMs={nowMs}
+            currentUser={currentUser}
+            triggeringTaskIDSet={triggeringTaskIDSet}
+            onSelect={onSelect}
+            onRun={onRun}
+          />
+          <DeployObjectMobileList
+            objects={objects}
+            selectedID={selectedID}
+            state={state}
+            woodpecker={woodpecker}
+            nowMs={nowMs}
+            currentUser={currentUser}
+            triggeringTaskIDSet={triggeringTaskIDSet}
+            onRun={onRun}
+            onSelect={onSelect}
+            onCancel={onCancel}
+            onInspect={onInspect}
+          />
+        </>
+      )}
     </Space>
   );
 }
 
-function DeployObjectDirectoryItem({
-  item,
-  selected,
+function DeployObjectListTable({
+  objects,
+  allObjects,
+  state,
+  woodpecker,
   nowMs,
-  onSelect
+  currentUser,
+  triggeringTaskIDSet,
+  onSelect,
+  onRun
 }: {
-  item: DeployObject;
-  selected: boolean;
+  objects: DeployObject[];
+  allObjects: DeployObject[];
+  state: StateResponse;
+  woodpecker: string;
   nowMs: number;
-  onSelect: () => void;
+  currentUser: User;
+  triggeringTaskIDSet: Set<string>;
+  onSelect: (id: string) => void;
+  onRun: (task: Task) => void;
 }) {
-  const latest = item.pipelines[0];
-  const active = item.pipelines.some((pipeline) => ["running", "pending"].includes(pipeline.status));
+  const columns: ProColumns<DeployObject>[] = [
+    {
+      title: "S",
+      width: 58,
+      align: "center",
+      render: (_, row) => <DeployObjectHealthMark item={row} />
+    },
+    {
+      title: "W",
+      width: 58,
+      align: "center",
+      render: (_, row) => <span className={`deploy-weather deploy-weather-${row.risk}`} />
+    },
+    {
+      title: "名称",
+      width: 300,
+      sorter: (a, b) => a.title.localeCompare(b.title, "zh-CN"),
+      render: (_, row) => (
+        <Space direction="vertical" size={1} className="table-cell-stack">
+          <Button type="link" className="deploy-object-name-link" onClick={(event) => { event.stopPropagation(); onSelect(row.id); }}>
+            {row.title}
+          </Button>
+          <Text type="secondary" ellipsis={{ tooltip: row.subtitle }}>{row.subtitle}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "上次成功",
+      width: 260,
+      render: (_, row) => <DeployObjectPipelineSnapshot row={lastPipelineByStatus(row, "success")} nowMs={nowMs} empty={row.deployment?.current_branch ? deploymentVersionText(row.deployment, nowMs) : "无"} />
+    },
+    {
+      title: "上次失败",
+      width: 250,
+      render: (_, row) => <DeployObjectPipelineSnapshot row={lastPipelineByStatus(row, "failed")} nowMs={nowMs} empty="无" />
+    },
+    {
+      title: "上次持续时间",
+      width: 150,
+      sorter: (a, b) => pipelineDurationSeconds(a.pipelines[0]) - pipelineDurationSeconds(b.pipelines[0]),
+      render: (_, row) => row.pipelines[0] ? <Text>{pipelineDurationText(row.pipelines[0], nowMs)}</Text> : <Text type="secondary">-</Text>
+    },
+    {
+      title: "",
+      width: 120,
+      fixed: "right",
+      render: (_, row) => (
+        <Space size={6} onClick={(event) => event.stopPropagation()}>
+          <DeployObjectPrimaryRunButton item={row} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
+          {row.pipelines[0] ? <Button size="small" href={pipelineURL(woodpecker, row.pipelines[0])} target="_blank" icon={<ExternalLink size={14} />} /> : null}
+        </Space>
+      )
+    }
+  ];
+
   return (
-    <button type="button" className={`deploy-object-directory-item ${selected ? "deploy-object-directory-item-active" : ""}`} onClick={onSelect}>
-      <span className={`deploy-object-status-rail deploy-object-status-rail-${item.risk}`} />
-      <span className="deploy-object-directory-main">
-        <span className="deploy-object-directory-title">
-          <Text strong ellipsis={{ tooltip: item.title }}>{item.title}</Text>
-          <Tag color={item.kind === "deployment" ? "blue" : riskColors[item.risk] || "default"}>{item.kind === "deployment" ? "项目" : "维护"}</Tag>
-          {item.attention && <Tag color="red">关注</Tag>}
-        </span>
-        <Text type="secondary" className="deploy-object-directory-subtitle" ellipsis={{ tooltip: item.subtitle }}>{item.subtitle}</Text>
-        <span className="deploy-object-directory-meta">
-          <Tag color={item.statusColor}>{item.statusLabel}</Tag>
-          {active && <Tag color="processing">运行/排队</Tag>}
-          {latest ? <Text type="secondary">#{latest.number} · {pipelineDurationText(latest, nowMs)}</Text> : <Text type="secondary">暂无流水线</Text>}
-        </span>
-      </span>
-    </button>
+    <Card className="deploy-object-index-card">
+      <div className="deploy-object-index-head">
+        <Space direction="vertical" size={1} className="table-cell-stack">
+          <Text strong>部署对象</Text>
+          <Text type="secondary">点击对象进入状态、构建历史和部署动作。</Text>
+        </Space>
+        <Tag>{objects.length}/{allObjects.length}</Tag>
+      </div>
+      <ProTable<DeployObject>
+        className="desktop-deploy-object-index-table"
+        rowKey="id"
+        size="small"
+        columns={columns}
+        dataSource={objects}
+        search={false}
+        options={false}
+        tableAlertRender={false}
+        pagination={{ pageSize: 14, showSizeChanger: true, pageSizeOptions: [14, 30, 60], showTotal: (total) => `共 ${total} 个对象` }}
+        scroll={{ x: 1190 }}
+        tableLayout="fixed"
+        onRow={(row) => ({ onClick: () => onSelect(row.id) })}
+      />
+      {!objects.length && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的对象" />}
+    </Card>
   );
 }
 
-function DeployObjectWorkbench({
+function DeployObjectDetailView({
   item,
   state,
   woodpecker,
   nowMs,
   currentUser,
   triggeringTaskIDSet,
+  onBack,
   onRun,
   onCancel,
   onInspect
 }: {
-  item: DeployObject | null;
+  item: DeployObject;
   state: StateResponse;
   woodpecker: string;
   nowMs: number;
   currentUser: User;
   triggeringTaskIDSet: Set<string>;
+  onBack: () => void;
   onRun: (task: Task) => void;
   onCancel: (row: Pipeline) => void;
   onInspect: (row: Pipeline) => void;
 }) {
-  if (!item) {
-    return (
-      <div className="deploy-object-workbench">
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="选择一个项目或动作查看详情" />
-      </div>
-    );
-  }
   const latest = item.pipelines[0];
   return (
-    <div className="deploy-object-workbench">
-      <div className="deploy-object-workbench-head">
-        <div className="deploy-object-workbench-title">
-          <Space size={6} wrap>
-            <Tag color={item.kind === "deployment" ? "blue" : riskColors[item.risk] || "default"}>{item.kind === "deployment" ? "部署对象" : "维护动作"}</Tag>
-            <Tag color={item.statusColor}>{item.statusLabel}</Tag>
-            {latest && <Tag color={statusColors[latest.status] || "default"}>#{latest.number} {statusText(latest.status)}</Tag>}
-          </Space>
-          <Title level={4}>{item.title}</Title>
-          <Text type="secondary">{item.subtitle}</Text>
-        </div>
-        <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
+    <div className="deploy-object-detail-shell">
+      <div className="deploy-object-breadcrumb">
+        <Button type="link" onClick={onBack}>部署</Button>
+        <Text type="secondary">/</Text>
+        <Text strong>{item.title}</Text>
       </div>
-      <DeployObjectStatusStrip item={item} state={state} nowMs={nowMs} />
-      <DeployObjectExpandedPanel item={item} state={state} woodpecker={woodpecker} nowMs={nowMs} compact onCancel={onCancel} onInspect={onInspect} />
+      <div className="deploy-object-detail-layout">
+        <aside className="deploy-object-detail-sidebar">
+          <div className="deploy-object-side-menu">
+            <button type="button" className="deploy-object-side-item deploy-object-side-item-active">
+              <Activity size={16} /> 状态
+            </button>
+            {item.primaryTask && (
+              <button type="button" className="deploy-object-side-item" disabled={!canRunTask(currentUser, item.primaryTask)} onClick={() => onRun(item.primaryTask!)}>
+                {item.kind === "deployment" ? <Rocket size={16} /> : <Play size={16} />}
+                {item.kind === "deployment" ? "部署" : "执行"}
+              </button>
+            )}
+            {item.rollbackTask && (
+              <button type="button" className="deploy-object-side-item deploy-object-side-danger" disabled={!canRunTask(currentUser, item.rollbackTask)} onClick={() => onRun(item.rollbackTask!)}>
+                <XCircle size={16} /> 回退
+              </button>
+            )}
+            {latest && (
+              <a className="deploy-object-side-item" href={pipelineURL(woodpecker, latest)} target="_blank" rel="noreferrer">
+                <ExternalLink size={16} /> 打开 Woodpecker
+              </a>
+            )}
+          </div>
+          <Card size="small" className="deploy-build-card" title="Builds">
+            <DeployBuildHistory rows={item.pipelines.slice(0, 12)} nowMs={nowMs} onInspect={onInspect} />
+          </Card>
+        </aside>
+        <main className="deploy-object-detail-main">
+          <div className="deploy-object-detail-head">
+            <div className="deploy-object-detail-title">
+              <Space size={8} wrap>
+                <DeployObjectHealthMark item={item} />
+                <Tag color={item.kind === "deployment" ? "blue" : riskColors[item.risk] || "default"}>{item.kind === "deployment" ? "部署对象" : "维护动作"}</Tag>
+                <Tag color={item.statusColor}>{item.statusLabel}</Tag>
+                {latest && <Tag color={statusColors[latest.status] || "default"}>#{latest.number} {statusText(latest.status)}</Tag>}
+              </Space>
+              <Title level={3}>{item.title}</Title>
+              <Text type="secondary">{item.subtitle}</Text>
+            </div>
+            <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
+          </div>
+          <DeployObjectStatusStrip item={item} state={state} nowMs={nowMs} />
+          <DeployObjectExpandedPanel item={item} state={state} woodpecker={woodpecker} nowMs={nowMs} compact onCancel={onCancel} onInspect={onInspect} />
+        </main>
+      </div>
     </div>
   );
+}
+
+function DeployObjectHealthMark({ item }: { item: DeployObject }) {
+  const latest = item.pipelines[0];
+  const status = latest?.status || (item.deployment?.deploy_verified ? "success" : item.risk === "danger" ? "failure" : "pending");
+  return <span className={`deploy-health deploy-health-${status === "success" ? "success" : ["failure", "error", "killed"].includes(status) ? "failure" : ["running", "pending"].includes(status) ? "running" : "unknown"}`} />;
+}
+
+function DeployObjectPrimaryRunButton({ item, currentUser, triggeringTaskIDSet, onRun }: { item: DeployObject; currentUser: User; triggeringTaskIDSet: Set<string>; onRun: (task: Task) => void }) {
+  if (!item.primaryTask) return <Text type="secondary">-</Text>;
+  const task = item.primaryTask;
+  return (
+    <Tooltip title={taskDisabledTitle(currentUser, task)}>
+      <span>
+        <Button
+          size="small"
+          type="text"
+          className="deploy-run-icon-button"
+          icon={item.kind === "deployment" ? <Rocket size={17} /> : <Play size={17} />}
+          loading={triggeringTaskIDSet.has(task.id)}
+          disabled={!canRunTask(currentUser, task)}
+          onClick={() => onRun(task)}
+        />
+      </span>
+    </Tooltip>
+  );
+}
+
+function DeployObjectPipelineSnapshot({ row, nowMs, empty }: { row?: Pipeline; nowMs: number; empty: string }) {
+  if (!row) return <Text type="secondary">{empty}</Text>;
+  return (
+    <Space direction="vertical" size={0} className="table-cell-stack">
+      <Text>{pipelineActivityMetaText(row, nowMs)}</Text>
+      <Text type="secondary" ellipsis={{ tooltip: `#${row.number}-${row.branch || "-"}` }}>#{row.number}-{row.branch || "-"}</Text>
+    </Space>
+  );
+}
+
+function DeployBuildHistory({ rows, nowMs, onInspect }: { rows: Pipeline[]; nowMs: number; onInspect: (row: Pipeline) => void }) {
+  if (!rows.length) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无构建" />;
+  return (
+    <div className="deploy-build-list">
+      {rows.map((row) => (
+        <button type="button" className="deploy-build-row" key={`${row.repo_id}-${row.number}`} onClick={() => onInspect(row)}>
+          <DeployPipelineStatusDot status={row.status} />
+          <span className="deploy-build-main">
+            <Text strong ellipsis={{ tooltip: `#${row.number}-${row.branch || "-"}` }}>#{row.number}-{row.branch || "-"}</Text>
+            <Text type="secondary">{pipelineDurationText(row, nowMs)}</Text>
+          </span>
+          <Text type="secondary">{pipelineTimeText(row).replace(/^完成 |^开始 |^创建 /, "")}</Text>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DeployPipelineStatusDot({ status }: { status: string }) {
+  const tone = status === "success" ? "success" : ["failure", "error", "killed"].includes(status) ? "failure" : ["running", "pending"].includes(status) ? "running" : "unknown";
+  return <span className={`deploy-pipeline-dot deploy-pipeline-dot-${tone}`} />;
 }
 
 function DeployObjectStatusStrip({ item, state, nowMs }: { item: DeployObject; state: StateResponse; nowMs: number }) {
@@ -4590,6 +4737,18 @@ function pipelineActivityMetaText(row: Pipeline, nowMs: number): string {
   const age = at ? deployedAgeText(at, nowMs) : "";
   const duration = row.started && row.finished ? `耗时 ${formatDuration(row.finished - row.started)}` : "";
   return [age, duration].filter(Boolean).join(" · ") || pipelineDurationText(row, nowMs);
+}
+
+function lastPipelineByStatus(item: DeployObject, status: "success" | "failed"): Pipeline | undefined {
+  if (status === "success") return item.pipelines.find((row) => row.status === "success");
+  return item.pipelines.find((row) => ["failure", "error", "killed"].includes(row.status));
+}
+
+function pipelineDurationSeconds(row?: Pipeline): number {
+  if (!row) return 0;
+  if (row.started && row.finished) return row.finished - row.started;
+  if (row.created && row.finished) return row.finished - row.created;
+  return 0;
 }
 
 function pipelineStepTimeText(step: PipelineStep): string {
