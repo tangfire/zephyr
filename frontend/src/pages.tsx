@@ -378,13 +378,6 @@ export function DeployPage({
         }
       />
       <div className="deploy-console">
-        <div className="deploy-console-head">
-          <Space size={8}>
-            <GitBranch size={16} />
-            <Text strong>对象工作台</Text>
-          </Space>
-          <Text type="secondary">对象 = 项目 + 环境/机器 + 可执行动作 + 关联流水线</Text>
-        </div>
         <div className="deploy-object-workbench">
           <DeployObjectList
             objects={filteredObjects}
@@ -474,11 +467,11 @@ function DeployObjectList({
         value={filter}
         onChange={(value) => onFilterChange(value as DeployObjectFilter)}
         options={[
-          { label: `全部 ${total}`, value: "all" },
-          { label: `关注 ${attention}`, value: "attention" },
-          { label: `运行 ${running}`, value: "running" },
-          { label: `项目 ${deployments}`, value: "deployment" },
-          { label: `维护 ${actions}`, value: "action" }
+          { label: "全部", value: "all" },
+          { label: "关注", value: "attention" },
+          { label: "运行", value: "running" },
+          { label: "项目", value: "deployment" },
+          { label: "维护", value: "action" }
         ]}
       />
       <Input
@@ -682,7 +675,7 @@ function DeployObjectDetail({
         />
       </div>
       {visiblePipelines.length ? (
-        <PipelineTable rows={visiblePipelines} woodpecker={woodpecker} nowMs={nowMs} onCancel={onCancel} onInspect={onInspect} />
+        <DeployObjectPipelineTable rows={visiblePipelines} woodpecker={woodpecker} nowMs={nowMs} onCancel={onCancel} onInspect={onInspect} />
       ) : (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={item.pipelines.length ? "当前筛选下没有流水线" : "这个对象还没有相关流水线记录"} />
       )}
@@ -704,6 +697,131 @@ function DeployObjectMetric({ label, value, accent = false }: { label: string; v
       <Text type="secondary">{label}</Text>
       <Text strong ellipsis={{ tooltip: value }}>{value}</Text>
     </div>
+  );
+}
+
+function DeployObjectPipelineTable({
+  rows,
+  woodpecker,
+  nowMs,
+  onCancel,
+  onInspect
+}: {
+  rows: Pipeline[];
+  woodpecker: string;
+  nowMs: number;
+  onCancel: (row: Pipeline) => void;
+  onInspect: (row: Pipeline) => void;
+}) {
+  const columns: ProColumns<Pipeline>[] = [
+    {
+      title: "流水线",
+      width: 132,
+      render: (_, row) => (
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Space size={6}>
+            <Text strong>#{row.number}</Text>
+            <Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag>
+          </Space>
+          <Text type="secondary">{pipelineKindText(row)}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "版本",
+      width: 150,
+      render: (_, row) => (
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text ellipsis={{ tooltip: row.branch || "-" }}>{row.branch || "-"}</Text>
+          <Text type="secondary">{(row.commit || "").slice(0, 8) || "-"}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "动作",
+      width: 190,
+      render: (_, row) => (
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text ellipsis={{ tooltip: pipelineTaskText(row) }}>{pipelineTaskText(row)}</Text>
+          {pipelineVariableHint(row) && (
+            <Tooltip title={pipelineVariableHint(row)}>
+              <Text type="secondary" className="pipeline-variable-hint">{pipelineVariableHint(row)}</Text>
+            </Tooltip>
+          )}
+        </Space>
+      )
+    },
+    {
+      title: "时间",
+      width: 150,
+      render: (_, row) => (
+        <Space direction="vertical" size={0} className="table-cell-stack">
+          <Text type="secondary">{pipelineTimeText(row)}</Text>
+          <Text>{pipelineDurationText(row, nowMs)}</Text>
+        </Space>
+      )
+    },
+    {
+      title: "",
+      width: 116,
+      render: (_, row) => (
+        <Space size={6}>
+          <Button size="small" onClick={() => onInspect(row)}>详情</Button>
+          <Button size="small" href={pipelineURL(woodpecker, row)} target="_blank" icon={<ExternalLink size={14} />} />
+          {["running", "pending"].includes(row.status) && (
+            <Popconfirm title="取消这条流水线？" onConfirm={() => onCancel(row)}>
+              <Button size="small" danger icon={<XCircle size={14} />} />
+            </Popconfirm>
+          )}
+        </Space>
+      )
+    }
+  ];
+  return (
+    <>
+      <ProTable<Pipeline>
+        className="desktop-pipeline-table deploy-object-pipeline-table"
+        rowKey={(row) => `${row.repo_id}-${row.number}`}
+        size="small"
+        columns={columns}
+        dataSource={rows}
+        search={false}
+        options={false}
+        tableAlertRender={false}
+        pagination={{ pageSize: 8, showSizeChanger: false, showTotal: (total) => `共 ${total} 条` }}
+        scroll={{ x: 760 }}
+        tableLayout="fixed"
+      />
+      <List
+        className="mobile-pipeline-list deploy-object-mobile-pipeline-list"
+        dataSource={rows}
+        pagination={{ pageSize: 8, size: "small" }}
+        renderItem={(row) => (
+          <List.Item
+            actions={[
+              <Button key="detail" size="small" onClick={() => onInspect(row)}>详情</Button>,
+              <Button key="open" size="small" href={pipelineURL(woodpecker, row)} target="_blank" icon={<ExternalLink size={14} />} />,
+              ["running", "pending"].includes(row.status) ? (
+                <Popconfirm key="cancel" title="取消这条流水线？" onConfirm={() => onCancel(row)}>
+                  <Button size="small" danger icon={<XCircle size={14} />} />
+                </Popconfirm>
+              ) : null
+            ].filter(Boolean)}
+          >
+            <List.Item.Meta
+              title={<Space><Text strong>#{row.number}</Text><Tag color={statusColors[row.status] || "default"}>{statusText(row.status)}</Tag></Space>}
+              description={
+                <Space direction="vertical" size={4} className="side-stack">
+                  <Text type="secondary">{row.branch || "-"} · {(row.commit || "").slice(0, 8) || "-"}</Text>
+                  <Text>{pipelineTaskText(row)}</Text>
+                  <Text type="secondary">{pipelineTimeText(row)} · {pipelineDurationText(row, nowMs)}</Text>
+                </Space>
+              }
+            />
+          </List.Item>
+        )}
+      />
+    </>
   );
 }
 

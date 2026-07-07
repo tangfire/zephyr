@@ -663,10 +663,10 @@ body {
 .deploy-console {
   display: grid;
   gap: 12px;
-  padding: 14px;
-  background: #f8faf7;
+  padding: 12px;
+  background: #fff;
   border: 1px solid #e0e7db;
-  border-radius: 10px;
+  border-radius: 8px;
 }
 
 .deploy-console-head {
@@ -687,7 +687,7 @@ body {
 
 .deploy-object-workbench {
   display: grid;
-  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
@@ -696,8 +696,8 @@ body {
   display: grid;
   gap: 10px;
   min-width: 0;
-  padding: 12px;
-  background: #fff;
+  padding: 10px;
+  background: #fbfcfa;
   border: 1px solid #e5e9e0;
   border-radius: 8px;
 }
@@ -707,6 +707,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 10px;
   min-width: 0;
 }
@@ -714,15 +715,15 @@ body {
 .deploy-object-list {
   display: grid;
   gap: 6px;
-  max-height: 672px;
+  max-height: min(672px, calc(100vh - 270px));
   overflow: auto;
   padding-right: 2px;
 }
 
 .deploy-object-item {
   display: grid;
-  grid-template-columns: 4px minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: 4px minmax(0, 1fr) 96px;
+  gap: 8px;
   align-items: center;
   width: 100%;
   min-width: 0;
@@ -808,7 +809,13 @@ body {
   display: grid;
   justify-items: end;
   gap: 4px;
-  min-width: 72px;
+  min-width: 0;
+}
+
+.deploy-object-side .ant-tag {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .deploy-object-filter .ant-segmented-item-label {
@@ -828,12 +835,12 @@ body {
 
 .deploy-object-detail {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
-  padding: 14px;
-  background: #fff;
-  border: 1px solid #e5e9e0;
-  border-radius: 8px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
 }
 
 .deploy-object-detail-empty {
@@ -851,7 +858,7 @@ body {
   justify-content: space-between;
   gap: 14px;
   min-width: 0;
-  padding: 15px;
+  padding: 14px;
   background: linear-gradient(180deg, #fbfdf9 0%, #f4f8f1 100%);
   border: 1px solid #dfe9d8;
   border-radius: 8px;
@@ -876,6 +883,11 @@ body {
 .deploy-object-detail-title h3,
 .deploy-object-detail-title h4 {
   margin: 0 !important;
+}
+
+.deploy-object-detail-title h3 {
+  font-size: 22px !important;
+  line-height: 1.2 !important;
 }
 
 .deploy-object-kicker {
@@ -916,6 +928,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
   min-width: 0;
   padding: 10px 12px;
@@ -926,6 +939,17 @@ body {
 
 .deploy-object-alert {
   margin: -2px 0 0;
+}
+
+.deploy-object-pipeline-table .ant-pro-card-body {
+  padding: 0 !important;
+}
+
+.deploy-object-pipeline-table .ant-table-wrapper {
+  background: #fff;
+  border: 1px solid #e6ece2;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .deployment-verify-note,
@@ -995,7 +1019,7 @@ body {
 
 .page-intro {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, auto) auto;
   gap: 16px;
   align-items: center;
 }
@@ -1010,13 +1034,15 @@ body {
 
 .page-intro-stats {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   align-items: center;
 }
 
 .page-intro-stat {
   display: grid;
-  min-width: 92px;
+  min-width: 86px;
   gap: 2px;
   padding: 8px 10px;
   background: #f8faf7;
