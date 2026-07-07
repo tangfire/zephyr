@@ -27,7 +27,7 @@ import (
 )
 
 const cookieName = "peapod_session"
-const productName = "Peapod"
+const productName = "Pedpod"
 
 type authUserContextKey struct{}
 
@@ -275,10 +275,10 @@ type Pipeline struct {
 	Updated           int64             `json:"updated,omitempty"`
 	Message           string            `json:"message"`
 	Variables         map[string]string `json:"variables,omitempty"`
-	PeapodTriggeredBy string            `json:"peapod_triggered_by,omitempty"`
-	PeapodTriggeredAt string            `json:"peapod_triggered_at,omitempty"`
-	PeapodTaskID      string            `json:"peapod_task_id,omitempty"`
-	PeapodTaskTitle   string            `json:"peapod_task_title,omitempty"`
+	PedpodTriggeredBy string            `json:"peapod_triggered_by,omitempty"`
+	PedpodTriggeredAt string            `json:"peapod_triggered_at,omitempty"`
+	PedpodTaskID      string            `json:"peapod_task_id,omitempty"`
+	PedpodTaskTitle   string            `json:"peapod_task_title,omitempty"`
 }
 
 type PipelineStep struct {
@@ -579,7 +579,7 @@ func main() {
 		Handler:           accessLogMiddleware(logger, cfg, securityHeaders(mux)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	logger.Info("Peapod listening", zap.String("addr", cfg.Addr))
+	logger.Info("Pedpod listening", zap.String("addr", cfg.Addr))
 	if err := server.ListenAndServe(); err != nil {
 		logger.Fatal("server stopped", zap.Error(err))
 	}
@@ -1437,7 +1437,7 @@ func (a *App) doctorRun(w http.ResponseWriter, r *http.Request) {
 		Username:  user.Username,
 		RemoteIP:  remoteIP(r),
 		TaskID:    "doctor-run",
-		TaskTitle: "运行 Peapod 体检",
+		TaskTitle: "运行 Pedpod 体检",
 		Variables: map[string]string{"readiness": doctor.Readiness},
 		Status:    "ok",
 	})
@@ -1627,7 +1627,7 @@ func (a *App) woodpeckerRepoAction(w http.ResponseWriter, r *http.Request) {
 			Username:  user.Username,
 			RemoteIP:  remoteIP(r),
 			TaskID:    "woodpecker-repo-save",
-			TaskTitle: "保存 Peapod 仓库映射",
+			TaskTitle: "保存 Pedpod 仓库映射",
 			RepoID:    req.RepoID,
 			Variables: map[string]string{"repo": strings.TrimSpace(req.RepoName)},
 			Status:    "ok",
@@ -2684,10 +2684,10 @@ func annotatePipelinesWithAudit(pipelines map[int][]Pipeline, records []AuditRec
 			if !ok {
 				continue
 			}
-			rows[index].PeapodTriggeredBy = record.Username
-			rows[index].PeapodTriggeredAt = record.Time
-			rows[index].PeapodTaskID = record.TaskID
-			rows[index].PeapodTaskTitle = record.TaskTitle
+			rows[index].PedpodTriggeredBy = record.Username
+			rows[index].PedpodTriggeredAt = record.Time
+			rows[index].PedpodTaskID = record.TaskID
+			rows[index].PedpodTaskTitle = record.TaskTitle
 		}
 		pipelines[repoID] = rows
 	}
@@ -2861,14 +2861,14 @@ func deploymentStatusFromPipeline(target deploymentTarget, repoID int, repoName 
 		LastDeployedAt:   pipelineFinishedAt(pipeline),
 		Pipeline:         pipeline.Number,
 		TriggeredBy:      pipelineActor(pipeline),
-		TriggeredAt:      pipeline.PeapodTriggeredAt,
+		TriggeredAt:      pipeline.PedpodTriggeredAt,
 		Variables:        sanitizeVariables(pipeline.Variables),
 	}
 }
 
 func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline, taskByID map[string]Task, tasks []Task) (deploymentTarget, string, bool) {
-	if pipeline.PeapodTaskID != "" {
-		if task, ok := taskByID[pipeline.PeapodTaskID]; ok {
+	if pipeline.PedpodTaskID != "" {
+		if task, ok := taskByID[pipeline.PedpodTaskID]; ok {
 			target, targetOK := deploymentTargetFromTask(task)
 			return target, task.Branch, targetOK
 		}
@@ -2878,14 +2878,14 @@ func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline
 		return target, task.Branch, targetOK
 	}
 	action := variableValue(pipeline.Variables, "DEPLOY_ACTION")
-	if action == "" && !pipelineHasPeapodProjectMetadata(pipeline.Variables) {
+	if action == "" && !pipelineHasPedpodProjectMetadata(pipeline.Variables) {
 		return deploymentTarget{}, "", false
 	}
 	if isMaintenanceAction(action) {
 		return deploymentTarget{}, "", false
 	}
 	task := Task{
-		ID:        fallbackText(pipeline.PeapodTaskID, fmt.Sprintf("repo-%d-pipeline", repoID)),
+		ID:        fallbackText(pipeline.PedpodTaskID, fmt.Sprintf("repo-%d-pipeline", repoID)),
 		Group:     deploymentGroupFromPipeline(repoName, pipeline),
 		Title:     deploymentTitleFromPipeline(repoName, pipeline),
 		RepoID:    repoID,
@@ -2897,7 +2897,7 @@ func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline
 	return target, task.Branch, ok
 }
 
-func pipelineHasPeapodProjectMetadata(variables map[string]string) bool {
+func pipelineHasPedpodProjectMetadata(variables map[string]string) bool {
 	return firstNonEmptyString(
 		variableValue(variables, "PEAPOD_PROJECT_ID"),
 		variableValue(variables, "ZEPHYR_PROJECT_ID"),
@@ -3010,7 +3010,7 @@ func deploymentGroupFromPipeline(repoName string, pipeline Pipeline) string {
 }
 
 func deploymentTitleFromPipeline(repoName string, pipeline Pipeline) string {
-	if title := meaningfulDeploymentLabel(pipeline.PeapodTaskTitle); title != "" {
+	if title := meaningfulDeploymentLabel(pipeline.PedpodTaskTitle); title != "" {
 		return title
 	}
 	name := meaningfulDeploymentLabel(firstNonEmptyString(
@@ -3042,8 +3042,8 @@ func meaningfulDeploymentLabel(value string) string {
 }
 
 func deploymentActionText(repoID int, repoName string, pipeline Pipeline) string {
-	if pipeline.PeapodTaskTitle != "" {
-		return pipeline.PeapodTaskTitle
+	if pipeline.PedpodTaskTitle != "" {
+		return pipeline.PedpodTaskTitle
 	}
 	variables := pipeline.Variables
 	action := variableValue(variables, "DEPLOY_ACTION")
@@ -3336,8 +3336,8 @@ func pipelineFinishedAt(pipeline Pipeline) int64 {
 }
 
 func pipelineActor(pipeline Pipeline) string {
-	if pipeline.PeapodTriggeredBy != "" {
-		return pipeline.PeapodTriggeredBy
+	if pipeline.PedpodTriggeredBy != "" {
+		return pipeline.PedpodTriggeredBy
 	}
 	if pipeline.Author != "" {
 		return pipeline.Author
@@ -3592,10 +3592,10 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 	items := []SetupStatusItem{
 		{
 			ID:          "peapod",
-			Title:       "Peapod 入口",
+			Title:       "Pedpod 入口",
 			Status:      setupStatusFromBool(a.cfg.PublicURL != ""),
 			Message:     fallbackText(a.cfg.PublicURL, "未配置公开访问地址"),
-			ActionLabel: "打开 Peapod",
+			ActionLabel: "打开 Pedpod",
 			ActionURL:   a.cfg.PublicURL,
 		},
 		{
@@ -3641,7 +3641,7 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 			ID:      "hosts",
 			Title:   "被管机器",
 			Status:  setupStatusFromBool(len(hosts) > 0),
-			Message: fmt.Sprintf("已配置 %d 台机器；业务机只需要 agent 和 SSH key，不需要运行 Peapod", len(hosts)),
+			Message: fmt.Sprintf("已配置 %d 台机器；业务机只需要 agent 和 SSH key，不需要运行 Pedpod", len(hosts)),
 		},
 		{
 			ID:      "tasks",
@@ -3661,14 +3661,14 @@ func (a *App) setupChecklist(hosts []MonitorHostConfig, verification DeploymentV
 		}
 		items = append(items, item)
 	}
-	add(a.urlChecklistItem("peapod-url", "Peapod 公开地址", a.cfg.PublicURL, true, "配置 PEAPOD_PUBLIC_URL，并确认反向代理可访问。"))
+	add(a.urlChecklistItem("peapod-url", "Pedpod 公开地址", a.cfg.PublicURL, true, "配置 PEAPOD_PUBLIC_URL，并确认反向代理可访问。"))
 	add(a.urlChecklistItem("woodpecker-url", "Woodpecker 公开入口", a.cfg.WoodpeckerPublicURL, true, "配置 WOODPECKER_PUBLIC_URL，并确认 ci 域名反代到 Woodpecker。"))
 	add(SetupChecklistItem{
 		ID:          "woodpecker-token",
 		Title:       "Woodpecker API token",
 		Status:      ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "ok", "error"),
 		Severity:    ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "ok", "error"),
-		Message:     ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "已配置，Peapod 可以触发流水线。", "未配置，Peapod 无法触发或取消流水线。"),
+		Message:     ternaryText(strings.TrimSpace(a.cfg.WoodpeckerToken) != "", "已配置，Pedpod 可以触发流水线。", "未配置，Pedpod 无法触发或取消流水线。"),
 		Fix:         "在 Woodpecker 创建用户 token 后填入配置中心。",
 		ActionLabel: "打开 Woodpecker",
 		ActionURL:   a.cfg.WoodpeckerPublicURL,
@@ -3690,7 +3690,7 @@ func (a *App) setupChecklist(hosts []MonitorHostConfig, verification DeploymentV
 		Title:       "Dozzle MCP",
 		Status:      ternaryText(logStrategy.DozzleMCPReady, "ok", ternaryText(logStrategy.Mode == "lightweight", "warning", "optional")),
 		Severity:    ternaryText(logStrategy.DozzleMCPReady, "ok", ternaryText(logStrategy.Mode == "lightweight", "warning", "ok")),
-		Message:     fallbackText(logStrategy.DozzleMCPMessage, "用于 Peapod 内置日志查询的只读接口。"),
+		Message:     fallbackText(logStrategy.DozzleMCPMessage, "用于 Pedpod 内置日志查询的只读接口。"),
 		Fix:         "设置 PEAPOD_DOZZLE_BASE_URL，并给 Dozzle 配置 DOZZLE_ENABLE_MCP=true。",
 		ActionLabel: "打开 Dozzle",
 		ActionURL:   a.cfg.DozzlePublicURL,
@@ -3710,7 +3710,7 @@ func (a *App) setupChecklist(hosts []MonitorHostConfig, verification DeploymentV
 		Title:    "被管机器",
 		Status:   ternaryText(len(hosts) > 0, "ok", "warning"),
 		Severity: ternaryText(len(hosts) > 0, "ok", "warning"),
-		Message:  fmt.Sprintf("已配置 %d 台机器。业务机不需要运行 Peapod，只需要监控 agent 或 SSH 兜底。", len(hosts)),
+		Message:  fmt.Sprintf("已配置 %d 台机器。业务机不需要运行 Pedpod，只需要监控 agent 或 SSH 兜底。", len(hosts)),
 		Fix:      "在配置中心添加 production / staging / operations / service 机器。",
 	})
 	verifyStatus := "ok"
@@ -3880,7 +3880,7 @@ func (a *App) logStrategyStatus() LogStrategyStatus {
 		status.Message = "跨机器历史检索、指标、告警和排障"
 	case "external":
 		status.Label = "外部日志平台"
-		status.Message = "日志由外部平台保存，Peapod 只保留入口和策略说明"
+		status.Message = "日志由外部平台保存，Pedpod 只保留入口和策略说明"
 	default:
 		status.Label = "轻量模式 Dozzle"
 		status.Message = "查看 Docker 已保留日志并实时跟随"
@@ -3900,7 +3900,7 @@ func (a *App) setupCommands(hosts []MonitorHostConfig) []SetupCommand {
 	return []SetupCommand{
 		{
 			ID:          "install-peapod",
-			Title:       "安装 Peapod 运维机",
+			Title:       "安装 Pedpod 运维机",
 			Description: "在运维/构建机 clone 仓库后执行。默认启动轻量栈，不强制 Grafana/Loki。",
 			Command: strings.TrimSpace(`git clone https://github.com/tangfire/peapod.git peapod
 cd peapod
@@ -3909,12 +3909,12 @@ scripts/install.sh`),
 		{
 			ID:          "host-preflight",
 			Title:       "被管机器一键准备",
-			Description: "在每台业务机上执行，完成基础信息检查、可选 Docker 安装、监控用户和 Peapod 只读公钥写入。",
+			Description: "在每台业务机上执行，完成基础信息检查、可选 Docker 安装、监控用户和 Pedpod 只读公钥写入。",
 			Command:     fmt.Sprintf(`curl -fsSL https://raw.githubusercontent.com/tangfire/peapod/main/scripts/managed-host.sh | PEAPOD_MONITOR_PUBLIC_KEY='%s' PEAPOD_MANAGED_USER=peapod-monitor INSTALL_DOCKER=1 sh`, publicKey),
 		},
 		{
 			ID:          "monitor-key",
-			Title:       "写入 Peapod 只读监控 SSH key",
+			Title:       "写入 Pedpod 只读监控 SSH key",
 			Description: "在被管机器的 SSH 用户下执行。这个 key 用于资源兜底读取，不进入前端。",
 			Command: fmt.Sprintf(`mkdir -p ~/.ssh
 chmod 700 ~/.ssh
@@ -3924,7 +3924,7 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 		{
 			ID:          "beszel-agent",
 			Title:       "接入 Beszel agent",
-			Description: "优先在 Beszel 页面创建系统并复制官方 agent 命令；Peapod 负责展示接入状态和跳转。",
+			Description: "优先在 Beszel 页面创建系统并复制官方 agent 命令；Pedpod 负责展示接入状态和跳转。",
 			Command:     fmt.Sprintf("# 打开 %s，在 Systems 里新增 %s，然后复制 Beszel 给出的 agent 命令到目标机器执行。", fallbackText(a.cfg.BeszelPublicURL, "Beszel"), firstHost),
 		},
 		{
@@ -3938,13 +3938,13 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 		},
 		{
 			ID:          "backup",
-			Title:       "备份 Peapod",
+			Title:       "备份 Pedpod",
 			Description: "升级或迁移前执行。默认备份配置、任务、审计和数据库 dump，不把 SSH 私钥打进备份包。",
 			Command:     "scripts/backup.sh",
 		},
 		{
 			ID:          "upgrade",
-			Title:       "升级 Peapod",
+			Title:       "升级 Pedpod",
 			Description: "先体检、自动备份，再拉取更新、构建并验证健康检查。",
 			Command:     "scripts/upgrade.sh",
 		},
@@ -3953,15 +3953,15 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 
 func setupDocLinks() []SetupDocLink {
 	return []SetupDocLink{
-		{Title: "运维架构", Description: "Peapod、Woodpecker、Beszel、Dozzle、Grafana/Loki 和业务机的关系。", Path: "docs/ops-architecture.md"},
+		{Title: "运维架构", Description: "Pedpod、Woodpecker、Beszel、Dozzle、Grafana/Loki 和业务机的关系。", Path: "docs/ops-architecture.md"},
 		{Title: "组件方案", Description: "如何选择轻量方案或完整观测方案。", Path: "docs/component-profiles.md"},
-		{Title: "迁移 Runbook", Description: "把 Peapod 迁到专用运维/构建机的步骤和验收项。", Path: "docs/migration-runbook.md"},
+		{Title: "迁移 Runbook", Description: "把 Pedpod 迁到专用运维/构建机的步骤和验收项。", Path: "docs/migration-runbook.md"},
 	}
 }
 
 func validateRuntimeConfig(cfg RuntimeConfigFile) error {
 	for label, value := range map[string]string{
-		"Peapod URL":           cfg.PublicURL,
+		"Pedpod URL":           cfg.PublicURL,
 		"Woodpecker Server":    cfg.WoodpeckerServer,
 		"Woodpecker PublicURL": cfg.WoodpeckerPublicURL,
 		"Beszel BaseURL":       cfg.BeszelBaseURL,
@@ -4175,7 +4175,7 @@ func (a *App) externalLinkTasks() []Task {
 			Builtin:     true,
 		})
 	}
-	add("peapod-open", "打开 Peapod", "回到运维驾驶舱入口。", a.cfg.PublicURL)
+	add("peapod-open", "打开 Pedpod", "回到运维驾驶舱入口。", a.cfg.PublicURL)
 	add("woodpecker-open", "打开 Woodpecker", "查看完整流水线、日志和仓库配置。", a.cfg.WoodpeckerPublicURL)
 	add("dozzle-open", "打开 Dozzle", "轻量查看本机 Docker 已保留日志并实时跟随，不落地集中日志库。", a.cfg.DozzlePublicURL)
 	add("grafana-open", "打开 Grafana", "查看日志、指标、链路和仪表盘。", a.cfg.GrafanaPublicURL)
@@ -4518,10 +4518,10 @@ func taskTemplates() []TaskTemplate {
 		},
 		{
 			ID:                   "peapod-self-deploy",
-			Title:                "Peapod 自部署",
-			Description:          "让 Peapod 自己也走 Woodpecker 部署和健康验证。",
+			Title:                "Pedpod 自部署",
+			Description:          "让 Pedpod 自己也走 Woodpecker 部署和健康验证。",
 			Category:             "运维",
-			DefaultGroup:         "Peapod",
+			DefaultGroup:         "Pedpod",
 			DefaultRisk:          "danger",
 			DefaultBranch:        "main",
 			RequiresVerification: true,
@@ -4885,14 +4885,14 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Peapod</title>
+  <title>Pedpod</title>
   <link rel="icon" type="image/svg+xml" href="` + faviconPath + `" />
   <style>{{template "styles"}}</style>
 </head>
 <body class="login-page">
   <main class="login-card">
     <div class="brand-mark" aria-hidden="true">` + peapodLogo + `</div>
-    <h1>Peapod</h1>
+    <h1>Pedpod</h1>
     <p>基础设施部署控制台</p>
     {{if .Error}}<div class="error">密码不正确。</div>{{end}}
     <form method="post" action="/login">
@@ -4914,7 +4914,7 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Peapod</title>
+  <title>Pedpod</title>
   <link rel="icon" type="image/svg+xml" href="` + faviconPath + `" />
   <style>{{template "styles"}}</style>
 </head>
@@ -4924,7 +4924,7 @@ var indexTemplate = template.Must(template.New("index").Parse(`<!doctype html>
       <div class="brand-mark brand-mark-small" aria-hidden="true">` + peapodLogo + `</div>
       <div>
         <div class="eyebrow">Infrastructure Console</div>
-        <h1>Peapod</h1>
+        <h1>Pedpod</h1>
       </div>
     </div>
     <nav>
@@ -5052,7 +5052,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Peapod · 部署文档</title>
+  <title>Pedpod · 部署文档</title>
   <link rel="icon" type="image/svg+xml" href="` + faviconPath + `" />
   <style>{{template "styles"}}</style>
 </head>
@@ -5076,7 +5076,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
       <div>
         <div class="eyebrow">Woodpecker Parameters</div>
         <h2>通用手动部署参数</h2>
-        <p>Peapod 的部署动作来自 <code>PEAPOD_TASKS_PATH</code> 指向的任务配置。面板不可用时，可以到 Woodpecker 手动触发同一个仓库、分支和变量。</p>
+        <p>Pedpod 的部署动作来自 <code>PEAPOD_TASKS_PATH</code> 指向的任务配置。面板不可用时，可以到 Woodpecker 手动触发同一个仓库、分支和变量。</p>
       </div>
       <a class="button" target="_blank" rel="noreferrer" href="{{.WoodpeckerURL}}">打开 Woodpecker</a>
     </section>
@@ -5105,7 +5105,7 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 
       <article class="doc-card">
         <h2>底层系统</h2>
-        <p>Peapod 只做统一入口和轻量诊断，真正执行仍由 Woodpecker、Beszel、Dozzle，以及可选 Grafana/Loki/Prometheus/Tempo 完成。</p>
+        <p>Pedpod 只做统一入口和轻量诊断，真正执行仍由 Woodpecker、Beszel、Dozzle，以及可选 Grafana/Loki/Prometheus/Tempo 完成。</p>
         <table class="param-table">
           <thead><tr><th>系统</th><th>用途</th><th>配置</th></tr></thead>
           <tbody>
@@ -5296,7 +5296,7 @@ function showLoadError(message) {
   ].join('');
   const el = document.getElementById('loadError');
   el.hidden = false;
-  el.textContent = 'Peapod 暂时没拿到部署数据：' + message;
+  el.textContent = 'Pedpod 暂时没拿到部署数据：' + message;
   document.getElementById('taskGroups').innerHTML = '';
   document.getElementById('quickLinks').innerHTML = '';
   document.getElementById('pipelines').innerHTML = '<p>暂无流水线。</p>';
@@ -5312,7 +5312,7 @@ function renderTasks() {
     if (task.external_url) continue;
     (groups[task.group] ||= []).push(task);
   }
-  const order = ['业务服务', '基础设施', 'Peapod', '磁盘维护'];
+  const order = ['业务服务', '基础设施', 'Pedpod', '磁盘维护'];
   const html = Object.entries(groups).sort((a, b) => groupIndex(a[0], order) - groupIndex(b[0], order)).map(([group, tasks]) => {
     return '<section class="task-section"><h2>' + esc(group) + '</h2><p>' + esc(groupNote(group)) + '</p><div class="task-grid">' + tasks.map(taskCard).join('') + '</div></section>';
   }).join('');
@@ -5342,7 +5342,7 @@ function groupNote(group) {
   const notes = {
     '业务服务': '业务服务部署、回退和重启。',
     '基础设施': 'Grafana、Loki、Tempo、Prometheus、Beszel、Woodpecker 配置刷新。',
-    'Peapod': '部署平台自更新。',
+    'Pedpod': '部署平台自更新。',
     '磁盘维护': '构建缓存和无用镜像清理。'
   };
   return notes[group] || '基础设施操作。';

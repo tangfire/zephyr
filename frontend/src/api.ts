@@ -38,7 +38,7 @@ export async function api<T = unknown>(url: string, init: RequestInit = {}): Pro
 }
 
 export function errorText(error: unknown): string {
-  if (error instanceof DOMException && error.name === "AbortError") return "请求超时，请检查 Peapod 服务和网络";
+  if (error instanceof DOMException && error.name === "AbortError") return "请求超时，请检查 Pedpod 服务和网络";
   return error instanceof Error ? error.message : String(error || "");
 }
 
@@ -53,7 +53,7 @@ function parseAPIErrorPayload(text: string): ApiErrorPayload {
     const payload = JSON.parse(text) as ApiErrorPayload;
     if (payload && (payload.error || payload.details)) return payload;
   } catch {
-    // Plain text errors are still supported by older Peapod handlers.
+    // Plain text errors are still supported by older handlers.
   }
   return { error: text };
 }

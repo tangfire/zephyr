@@ -673,7 +673,7 @@ function DeployObjectDetailView({
               <Tag color="blue">{item.branchLabel}</Tag>
             </div>
           </div>
-          <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} />
+          <DeployObjectRowActions item={item} woodpecker={woodpecker} currentUser={currentUser} triggeringTaskIDSet={triggeringTaskIDSet} onRun={onRun} showRollback />
         </div>
         <DeployObjectStatusStrip item={item} state={state} nowMs={nowMs} />
         <DeployObjectExpandedPanel item={item} state={state} woodpecker={woodpecker} nowMs={nowMs} compact onCancel={onCancel} onInspect={onInspect} />
@@ -778,19 +778,21 @@ function DeployObjectRowActions({
   woodpecker,
   currentUser,
   triggeringTaskIDSet,
-  onRun
+  onRun,
+  showRollback = false
 }: {
   item: DeployObject;
   woodpecker: string;
   currentUser: User;
   triggeringTaskIDSet: Set<string>;
   onRun: (task: Task) => void;
+  showRollback?: boolean;
 }) {
   const lastPipeline = item.pipelines[0];
   const rollbackTask = deployObjectRollbackTask(item);
   return (
     <Space size={8} onClick={(event) => event.stopPropagation()}>
-      {item.primaryTask && (
+      {item.primaryTask && canRunTask(currentUser, item.primaryTask) && (
         <Tooltip title={taskDisabledTitle(currentUser, item.primaryTask)}>
           <span>
             <Button
@@ -807,7 +809,7 @@ function DeployObjectRowActions({
           </span>
         </Tooltip>
       )}
-      {rollbackTask && (
+      {showRollback && rollbackTask && canRunTask(currentUser, rollbackTask) && (
         <Tooltip title={taskDisabledTitle(currentUser, rollbackTask)}>
           <span>
             <Button
@@ -3414,7 +3416,7 @@ function TaskTemplatePanel({ state, onApplied }: { state: StateResponse; onAppli
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={8}>
           <Space direction="vertical" size={10} className="side-stack">
-            <Text type="secondary">选择最接近的场景，Peapod 会生成 Woodpecker 变量、项目归并字段和部署验证项。</Text>
+            <Text type="secondary">选择最接近的场景，{PRODUCT_NAME} 会生成 Woodpecker 变量、项目归并字段和部署验证项。</Text>
             {selected && (
               <Card size="small" className="template-preview-card">
                 <Space direction="vertical" size={8} className="side-stack">
@@ -3579,7 +3581,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
     : initialSection === "logs"
       ? "这里选择轻量 Dozzle 或完整 Grafana/Loki，并配置日志入口与 Docker 日志保留策略。"
       : initialSection === "core"
-        ? "这里配置 Peapod、Woodpecker 和 Beszel 的服务地址与 API 凭据。"
+        ? `这里配置 ${PRODUCT_NAME}、Woodpecker 和 Beszel 的服务地址与 API 凭据。`
         : "先看上线阻断项，再进入对应设置分组处理。";
   const showGuide = initialSection === "guide";
   const showCore = initialSection === "core";
@@ -3792,7 +3794,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
               </Form.Item>
             </Col>
             <Col xs={24} lg={8}>
-              <Form.Item label="Dozzle 内部地址" name="dozzle_base_url" extra="Peapod 通过这个地址访问 Dozzle MCP，默认 Docker 网络内为 http://dozzle:8080。">
+              <Form.Item label="Dozzle 内部地址" name="dozzle_base_url" extra={`${PRODUCT_NAME} 通过这个地址访问 Dozzle MCP，默认 Docker 网络内为 http://dozzle:8080。`}>
                 <Input placeholder="http://dozzle:8080" />
               </Form.Item>
             </Col>
@@ -3804,7 +3806,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
           </Row>
           <Row gutter={12}>
             <Col xs={24} lg={8}>
-              <Form.Item label="Dozzle 用户名" name="dozzle_username" extra="Dozzle 开启 simple auth 后，Peapod 会用这个账号读取 MCP。">
+              <Form.Item label="Dozzle 用户名" name="dozzle_username" extra={`Dozzle 开启 simple auth 后，${PRODUCT_NAME} 会用这个账号读取 MCP。`}>
                 <Input placeholder="tangfire" autoComplete="username" />
               </Form.Item>
             </Col>
@@ -4807,7 +4809,8 @@ function repoNameByID(state: StateResponse, repoID: number): string {
 function productText(value?: string): string {
   return String(value || "")
     .replace(/Zefire(?:\s+(?:Deploy|Cloud))?/g, PRODUCT_NAME)
-    .replace(/Zephyr/g, PRODUCT_NAME);
+    .replace(/Zephyr/g, PRODUCT_NAME)
+    .replace(/Peapod/g, PRODUCT_NAME);
 }
 
 function riskLabel(risk: Risk): string {
