@@ -2,12 +2,16 @@
 
 Peapod is a lightweight operations cockpit for small teams. It gives one clean entry point for deployment, pipeline diagnosis, resource monitoring, logs, and infrastructure links while keeping the underlying tools replaceable.
 
-The default stack is:
+The default lightweight stack is:
 
 - Peapod: operations cockpit and task registry
 - Woodpecker: CI/CD runner and manual deployment executor
 - Beszel: host and container resource visibility
-- Grafana + Prometheus + Loki + Tempo: metrics, logs, and traces
+- Dozzle: live Docker log viewer without a central log database
+
+The optional full observability stack is:
+
+- Grafana + Prometheus + Loki + Tempo: historical metrics, logs, traces, dashboards, and alerts
 
 Peapod does not replace these systems. It hides the daily complexity so operators can work from one product surface.
 
@@ -21,12 +25,19 @@ vi .env
 docker compose up -d --build
 ```
 
+This starts the lightweight stack. To also start Grafana, Prometheus, Loki, and Tempo:
+
+```bash
+docker compose --profile observability up -d --build
+```
+
 Open:
 
 - Peapod: `http://127.0.0.1:8095`
 - Woodpecker: `http://127.0.0.1:8000`
 - Beszel: `http://127.0.0.1:8090`
-- Grafana: `http://127.0.0.1:3000`
+- Dozzle: `http://127.0.0.1:8081`
+- Grafana, when `observability` is enabled: `http://127.0.0.1:3000`
 
 Run checks:
 
@@ -58,6 +69,7 @@ The bundled `examples/` folder contains:
 ## Operations Docs
 
 - [Architecture](docs/ops-architecture.md): how Peapod, Woodpecker, Beszel, Grafana, Loki, and managed machines fit together.
+- [Component Profiles](docs/component-profiles.md): choose the lightweight or full observability stack.
 - [Migration Runbook](docs/migration-runbook.md): how to move Peapod to a dedicated operations/build machine and connect production or test hosts.
 
 ## Required Secrets
@@ -173,7 +185,9 @@ After that, daily operations should happen inside Peapod:
 - inspect running and failed pipelines
 - read failure summaries and tail logs
 - check host CPU, memory, disk, containers
-- open Grafana/Beszel/Woodpecker only for deeper details
+- open Woodpecker/Beszel/Dozzle/Grafana only for deeper details
+
+For small machines, keep the default lightweight profile first. It uses Beszel for resource curves and Dozzle for live container logs. Enable the `observability` profile only when you need searchable log history, metrics retention, traces, or Grafana alerts.
 
 ## Boundary
 

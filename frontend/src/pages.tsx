@@ -1269,6 +1269,7 @@ export function MonitoringView({
             {summary?.source && <Tag color={monitoringSourceColor(summary.source)}>{monitoringSourceText(summary.source)}</Tag>}
             {summary?.checked_at && <Text type="secondary">{checkedAtText(summary.checked_at, nowMs)}</Text>}
             {links.beszel && <Button href={links.beszel} target="_blank" icon={<ExternalLink size={15} />}>Beszel</Button>}
+            {links.dozzle && <Button href={links.dozzle} target="_blank" icon={<ExternalLink size={15} />}>Dozzle</Button>}
             {links.grafana && <Button href={links.grafana} target="_blank" icon={<ExternalLink size={15} />}>Grafana</Button>}
             {links.woodpecker && <Button href={links.woodpecker} target="_blank" icon={<ExternalLink size={15} />}>流水线</Button>}
             <Button icon={<RefreshCw size={16} />} loading={loading} onClick={onRefresh}>
@@ -2300,7 +2301,14 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
               </Form.Item>
             </Col>
             <Col xs={24} lg={8}>
-              <Form.Item label="Grafana 公开地址" name="grafana_public_url">
+              <Form.Item label="Dozzle 公开地址" name="dozzle_public_url" extra="轻量日志入口：实时查看 Docker logs，不落地集中日志库。">
+                <Input placeholder="https://logs.example.com" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col xs={24} lg={8}>
+              <Form.Item label="Grafana 公开地址" name="grafana_public_url" extra="完整观测入口：历史日志、指标、链路和告警。轻量模式可留空或稍后启用。">
                 <Input placeholder="https://grafana.example.com" />
               </Form.Item>
             </Col>
@@ -2449,7 +2457,7 @@ function SetupConfigPanel({ onReload }: { onReload: () => Promise<void> }) {
                     </Form.Item>
                   </Card>
                 ))}
-                {!fields.length && <Text type="secondary">暂无额外入口；{PRODUCT_NAME}、Woodpecker、Beszel、Grafana 会自动显示。</Text>}
+                {!fields.length && <Text type="secondary">暂无额外入口；{PRODUCT_NAME}、Woodpecker、Beszel、Dozzle、Grafana 会自动显示。</Text>}
               </Space>
             )}
           </Form.List>
@@ -2705,6 +2713,7 @@ function normalizeSetupFormValues(values: RuntimeConfigInput): RuntimeConfigInpu
     beszel_public_url: String(values.beszel_public_url || "").trim(),
     beszel_email: String(values.beszel_email || "").trim(),
     beszel_password: String(values.beszel_password || "").trim(),
+    dozzle_public_url: String(values.dozzle_public_url || "").trim(),
     grafana_public_url: String(values.grafana_public_url || "").trim(),
     external_links: externalLinks,
     monitor_hosts: monitorHosts,
@@ -2724,12 +2733,14 @@ function normalizeStringArray(values?: string[]): string[] {
 
 function setupStatusColor(status: string): string {
   if (status === "ok") return "success";
+  if (status === "optional") return "default";
   if (status === "error" || status === "critical") return "error";
   return "warning";
 }
 
 function setupStatusText(status: string): string {
   if (status === "ok") return "已就绪";
+  if (status === "optional") return "可选";
   if (status === "error" || status === "critical") return "异常";
   return "待配置";
 }

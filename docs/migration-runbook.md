@@ -1,6 +1,6 @@
 # 迁移到专用运维/构建机 Runbook
 
-这份文档用于把 Peapod、Woodpecker、Beszel、Grafana、Loki 等运维能力从临时机器迁移到一台新的专用运维/构建机。目标是：迁完以后，写书猫、e站、9router 等业务机器只作为被管理节点，不再承担运维驾驶舱职责。
+这份文档用于把 Peapod、Woodpecker、Beszel、Dozzle、Grafana/Loki 等运维能力从临时机器迁移到一台新的专用运维/构建机。目标是：迁完以后，写书猫、e站、9router 等业务机器只作为被管理节点，不再承担运维驾驶舱职责。
 
 ## 迁移前确认
 
@@ -10,11 +10,12 @@
 - 磁盘 80GB 起步，推荐 100GB 以上。
 - Docker 和 Docker Compose plugin。
 - 可访问 GitHub、镜像源、业务机器 SSH 端口。
-- 域名已准备好：Peapod、Woodpecker、Beszel、Grafana。
+- 域名已准备好：Peapod、Woodpecker、Beszel、Dozzle；如果开启完整观测栈，再准备 Grafana。
 - 云厂商安全组已放行临时验证端口，或已准备 80/443 反代：
   - Peapod: `8095`
   - Woodpecker: `8000`
   - Beszel hub: `8090`
+  - Dozzle: `8081`
   - Grafana: `3000`
 
 准备迁移资料：
@@ -23,10 +24,11 @@
 - Peapod `data/zephyr/tasks.json`。
 - Woodpecker repo 配置、agent secret、OAuth 配置和 deploy secrets。
 - Beszel hub 数据或重新接入计划。
-- Grafana dashboard、datasource、alert 配置。
+- Dozzle 入口配置。
+- Grafana dashboard、datasource、alert 配置（仅完整观测栈）。
 - Loki/Prometheus 数据是否需要保留。v1 可以不迁历史数据，只迁配置。
 
-默认建议：不要迁旧 Loki/Tempo/Prometheus 历史数据，只迁 Grafana dashboard、datasource、Alloy/Prometheus/Loki/Tempo 配置。历史日志通常体积大、价值衰减快，新运维机上线后重新积累更干净。
+默认建议：新机器先用轻量方案，不迁旧 Loki/Tempo/Prometheus 历史数据。确实需要完整观测时，再迁 Grafana dashboard、datasource、Alloy/Prometheus/Loki/Tempo 配置。历史日志通常体积大、价值衰减快，新运维机上线后重新积累更干净。
 
 ## 新机器安装
 
@@ -62,6 +64,8 @@ vi .env
 ```env
 ZEPHYR_PUBLIC_URL=https://deploy.example.com
 WOODPECKER_PUBLIC_URL=https://ci.example.com
+DOZZLE_PUBLIC_URL=https://logs.example.com
+ZEPHYR_DOZZLE_PUBLIC_URL=https://logs.example.com
 ZEPHYR_SESSION_SECRET=change-me
 ZEPHYR_PASSWORD=change-me
 WOODPECKER_TOKEN=change-me
@@ -91,6 +95,12 @@ ZEPHYR_BOOTSTRAP_PASSWORD=change-this-on-first-login
 ```bash
 docker compose up -d --build
 scripts/doctor.sh
+```
+
+默认命令只启动轻量方案。需要 Grafana/Loki/Prometheus/Tempo 时再执行：
+
+```bash
+docker compose --profile observability up -d --build
 ```
 
 如果这是构建机，建议准备 Woodpecker 常用宿主目录：
@@ -184,7 +194,7 @@ docker compose start woodpecker-server woodpecker-agent
 1. 添加 monitor SSH public key。
 2. 添加 deploy SSH public key。
 3. 启动 Beszel agent。
-4. 启动日志采集 agent。
+4. 轻量方案可以先不启动日志采集 agent；完整观测方案再启动日志采集 agent。
 5. 检查防火墙，只开放必要端口。
 
 ### Beszel agent
@@ -202,7 +212,20 @@ docker compose start woodpecker-server woodpecker-agent
 
 不要在安全组未放通 `8090` 前切 agent，否则 agent 会反复重连失败，Peapod 只能继续走 SSH fallback。
 
-### 日志采集 agent
+### 轻量日志：Dozzle
+
+默认 compose 会启动 Dozzle，它通过 Docker socket 查看运维机本机容器实时日志，不迁历史数据。建议只通过内网、反代和登录保护暴露：
+
+```env
+DOZZLE_BIND=127.0.0.1
+DOZZLE_PORT=8081
+DOZZLE_PUBLIC_URL=https://logs.example.com
+ZEPHYR_DOZZLE_PUBLIC_URL=https://logs.example.com
+DOZZLE_ENABLE_ACTIONS=false
+DOZZLE_ENABLE_SHELL=false
+```
+
+### 完整观测：日志采集 agent
 
 推荐 Grafana Alloy。业务机只负责采集并推送，Loki 放在运维/构建机。
 
@@ -223,6 +246,7 @@ docker compose start woodpecker-server woodpecker-agent
 - `deploy.example.com`
 - `ci.example.com`
 - `beszel.example.com`
+- `logs.example.com`
 - `grafana.example.com`
 
 如果新机器一开始没有域名，可以先用 IP + 端口验证：
@@ -230,6 +254,7 @@ docker compose start woodpecker-server woodpecker-agent
 - Peapod: `http://NEW_IP:8095`
 - Woodpecker: `http://NEW_IP:8000`
 - Beszel: `http://NEW_IP:8090`
+- Dozzle: `http://NEW_IP:8081`
 - Grafana: `http://NEW_IP:3000`
 
 但 GitHub OAuth、Webhook 回调、HTTPS 登录 Cookie 最终仍建议使用正式域名。
@@ -240,6 +265,7 @@ docker compose start woodpecker-server woodpecker-agent
 curl -I https://deploy.example.com
 curl -I https://ci.example.com
 curl -I https://beszel.example.com
+curl -I https://logs.example.com
 curl -I https://grafana.example.com
 ```
 
@@ -251,10 +277,11 @@ curl -I https://grafana.example.com
 
 - Peapod 可以登录。
 - Peapod 首页显示两台业务机资源。
-- Peapod 可以打开 Woodpecker、Beszel、Grafana。
+- Peapod 可以打开 Woodpecker、Beszel、Dozzle；完整观测方案下也可以打开 Grafana。
 - 写书猫部署任务可以触发，并能跳转到 Woodpecker 对应流水线。
 - 失败流水线能在 Peapod 看到关键错误摘要。
-- 生产机和业务机日志能在 Grafana/Loki 搜索。
+- 轻量方案下，Dozzle 能查看运维机本机容器实时日志。
+- 完整观测方案下，生产机和业务机日志能在 Grafana/Loki 搜索。
 - 清理磁盘任务有确认框、审计记录，并且不会清理业务数据目录。
 - 回退任务可以看到上一成功版本。
 
@@ -274,5 +301,6 @@ curl -I https://grafana.example.com
 - 把业务机 agent 安装做成一条 bootstrap 命令。
 - 给 Peapod 增加主机接入向导。
 - 给 Loki 增加项目维度的默认查询模板。
+- 给 Dozzle 增加按服务分组的快捷入口。
 - 给 Woodpecker secrets 增加迁移清单。
 - 给 Peapod 增加“新机器接入检查”页面。

@@ -57,6 +57,7 @@ type Config struct {
 	BeszelPublicURL       string
 	BeszelEmail           string
 	BeszelPassword        string
+	DozzlePublicURL       string
 	GrafanaPublicURL      string
 	ExternalLinksJSON     string
 	MonitorHostsJSON      string
@@ -79,6 +80,7 @@ type RuntimeConfigFile struct {
 	BeszelPublicURL       string               `json:"beszel_public_url,omitempty"`
 	BeszelEmail           string               `json:"beszel_email,omitempty"`
 	BeszelPassword        string               `json:"beszel_password,omitempty"`
+	DozzlePublicURL       string               `json:"dozzle_public_url,omitempty"`
 	GrafanaPublicURL      string               `json:"grafana_public_url,omitempty"`
 	ExternalLinks         []ExternalLinkConfig `json:"external_links"`
 	MonitorHosts          []MonitorHostConfig  `json:"monitor_hosts"`
@@ -97,6 +99,7 @@ type RuntimeConfigInput struct {
 	BeszelPublicURL       string               `json:"beszel_public_url"`
 	BeszelEmail           string               `json:"beszel_email"`
 	BeszelPassword        string               `json:"beszel_password"`
+	DozzlePublicURL       string               `json:"dozzle_public_url"`
 	GrafanaPublicURL      string               `json:"grafana_public_url"`
 	ExternalLinks         []ExternalLinkConfig `json:"external_links"`
 	MonitorHosts          []MonitorHostConfig  `json:"monitor_hosts"`
@@ -452,7 +455,8 @@ func loadConfig() Config {
 		BeszelPublicURL:       strings.TrimRight(envCompat("ZEPHYR_BESZEL_PUBLIC_URL", "ZEFIRE_BESZEL_PUBLIC_URL", "http://127.0.0.1:8090"), "/"),
 		BeszelEmail:           envCompat("ZEPHYR_BESZEL_EMAIL", "ZEFIRE_BESZEL_EMAIL", ""),
 		BeszelPassword:        envCompat("ZEPHYR_BESZEL_PASSWORD", "ZEFIRE_BESZEL_PASSWORD", ""),
-		GrafanaPublicURL:      strings.TrimRight(envCompat("ZEPHYR_GRAFANA_PUBLIC_URL", "ZEFIRE_GRAFANA_PUBLIC_URL", "http://127.0.0.1:3000"), "/"),
+		DozzlePublicURL:       strings.TrimRight(firstNonEmptyString(envCompat("ZEPHYR_DOZZLE_PUBLIC_URL", "ZEFIRE_DOZZLE_PUBLIC_URL", ""), env("DOZZLE_PUBLIC_URL", "")), "/"),
+		GrafanaPublicURL:      strings.TrimRight(envCompat("ZEPHYR_GRAFANA_PUBLIC_URL", "ZEFIRE_GRAFANA_PUBLIC_URL", ""), "/"),
 		ExternalLinksJSON:     envCompat("ZEPHYR_LINKS_JSON", "ZEFIRE_LINKS_JSON", ""),
 		MonitorHostsJSON:      envCompat("ZEPHYR_MONITOR_HOSTS_JSON", "ZEFIRE_MONITOR_HOSTS_JSON", ""),
 		MonitorSSHKeyPath:     envCompat("ZEPHYR_MONITOR_SSH_KEY_PATH", "ZEFIRE_MONITOR_SSH_KEY_PATH", "/data/ssh/monitor_ed25519"),
@@ -526,9 +530,8 @@ func applyRuntimeConfig(cfg *Config, runtime RuntimeConfigFile) {
 	if value := strings.TrimSpace(runtime.BeszelPassword); value != "" {
 		cfg.BeszelPassword = value
 	}
-	if value := cleanURL(runtime.GrafanaPublicURL); value != "" {
-		cfg.GrafanaPublicURL = value
-	}
+	cfg.GrafanaPublicURL = cleanURL(runtime.GrafanaPublicURL)
+	cfg.DozzlePublicURL = cleanURL(runtime.DozzlePublicURL)
 	if runtime.ExternalLinks != nil {
 		cfg.ExternalLinksJSON = mustMarshalString(normalizeExternalLinks(runtime.ExternalLinks))
 	}
@@ -557,6 +560,7 @@ func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing R
 		BeszelBaseURL:         cleanURL(input.BeszelBaseURL),
 		BeszelPublicURL:       cleanURL(input.BeszelPublicURL),
 		BeszelEmail:           strings.TrimSpace(input.BeszelEmail),
+		DozzlePublicURL:       cleanURL(input.DozzlePublicURL),
 		GrafanaPublicURL:      cleanURL(input.GrafanaPublicURL),
 		ExternalLinks:         normalizeExternalLinks(input.ExternalLinks),
 		MonitorHosts:          normalizeMonitorHosts(input.MonitorHosts, current.MonitorSSHKeyPath),
@@ -587,9 +591,6 @@ func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing R
 	}
 	if cfg.BeszelPublicURL == "" {
 		cfg.BeszelPublicURL = current.BeszelPublicURL
-	}
-	if cfg.GrafanaPublicURL == "" {
-		cfg.GrafanaPublicURL = current.GrafanaPublicURL
 	}
 	return cfg
 }
@@ -1168,6 +1169,7 @@ func (a *App) setupConfig(w http.ResponseWriter, r *http.Request) {
 				"ZEPHYR_PUBLIC_URL":         next.PublicURL,
 				"WOODPECKER_PUBLIC_URL":     next.WoodpeckerPublicURL,
 				"ZEPHYR_BESZEL_PUBLIC_URL":  next.BeszelPublicURL,
+				"ZEPHYR_DOZZLE_PUBLIC_URL":  next.DozzlePublicURL,
 				"ZEPHYR_GRAFANA_PUBLIC_URL": next.GrafanaPublicURL,
 			},
 			Status: "ok",
@@ -2934,6 +2936,7 @@ func (a *App) setupConfigResponse(now time.Time) SetupConfigResponse {
 		BeszelPublicURL:       a.cfg.BeszelPublicURL,
 		BeszelEmail:           a.cfg.BeszelEmail,
 		BeszelPassword:        "",
+		DozzlePublicURL:       a.cfg.DozzlePublicURL,
 		GrafanaPublicURL:      a.cfg.GrafanaPublicURL,
 		ExternalLinks:         a.extraExternalLinks(),
 		MonitorHosts:          hosts,
@@ -2991,10 +2994,18 @@ func (a *App) setupStatus(hosts []MonitorHostConfig) []SetupStatusItem {
 			ActionURL:   a.cfg.BeszelPublicURL,
 		},
 		{
+			ID:          "dozzle",
+			Title:       "Dozzle 轻量日志",
+			Status:      setupStatusFromBool(a.cfg.DozzlePublicURL != ""),
+			Message:     fallbackText(a.cfg.DozzlePublicURL, "未配置 Dozzle 入口；轻量模式下建议启用"),
+			ActionLabel: "打开 Dozzle",
+			ActionURL:   a.cfg.DozzlePublicURL,
+		},
+		{
 			ID:          "grafana",
 			Title:       "Grafana / Loki",
-			Status:      setupStatusFromBool(a.cfg.GrafanaPublicURL != ""),
-			Message:     fallbackText(a.cfg.GrafanaPublicURL, "未配置 Grafana 入口"),
+			Status:      ternaryText(a.cfg.GrafanaPublicURL != "", "ok", "optional"),
+			Message:     fallbackText(a.cfg.GrafanaPublicURL, "未配置 Grafana 入口；完整历史日志/指标模式再启用"),
 			ActionLabel: "打开 Grafana",
 			ActionURL:   a.cfg.GrafanaPublicURL,
 		},
@@ -3053,7 +3064,7 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 		{
 			ID:          "logs-agent",
 			Title:       "接入日志采集 agent",
-			Description: "业务机只跑采集端，把 Docker 和应用日志推到运维机 Loki；完整查询在 Grafana。",
+			Description: "轻量模式先用 Dozzle 看实时日志；需要历史检索时，业务机再跑采集端推到运维机 Loki。",
 			Command: strings.TrimSpace(`# 推荐使用 Grafana Alloy / Promtail / Vector
 # 采集：Docker logs、Caddy/Nginx logs、应用结构化日志
 # 推送：中心 Loki
@@ -3064,7 +3075,8 @@ chmod 600 ~/.ssh/authorized_keys`, publicKey, publicKey),
 
 func setupDocLinks() []SetupDocLink {
 	return []SetupDocLink{
-		{Title: "运维架构", Description: "Peapod、Woodpecker、Beszel、Grafana、Loki 和业务机的关系。", Path: "docs/ops-architecture.md"},
+		{Title: "运维架构", Description: "Peapod、Woodpecker、Beszel、Dozzle、Grafana/Loki 和业务机的关系。", Path: "docs/ops-architecture.md"},
+		{Title: "组件方案", Description: "如何选择轻量方案或完整观测方案。", Path: "docs/component-profiles.md"},
 		{Title: "迁移 Runbook", Description: "把 Peapod 迁到专用运维/构建机的步骤和验收项。", Path: "docs/migration-runbook.md"},
 	}
 }
@@ -3076,6 +3088,7 @@ func validateRuntimeConfig(cfg RuntimeConfigFile) error {
 		"Woodpecker PublicURL": cfg.WoodpeckerPublicURL,
 		"Beszel BaseURL":       cfg.BeszelBaseURL,
 		"Beszel PublicURL":     cfg.BeszelPublicURL,
+		"Dozzle PublicURL":     cfg.DozzlePublicURL,
 		"Grafana PublicURL":    cfg.GrafanaPublicURL,
 	} {
 		if value != "" && !strings.HasPrefix(value, "http://") && !strings.HasPrefix(value, "https://") {
@@ -3212,6 +3225,7 @@ func (a *App) configuredLinks() map[string]string {
 	addLink("woodpecker", a.cfg.WoodpeckerPublicURL)
 	addLink("grafana", a.cfg.GrafanaPublicURL)
 	addLink("beszel", a.cfg.BeszelPublicURL)
+	addLink("dozzle", a.cfg.DozzlePublicURL)
 	for _, link := range a.extraExternalLinks() {
 		id := normalizeTaskID(link.ID)
 		if id == "" {
@@ -3244,6 +3258,7 @@ func (a *App) externalLinkTasks() []Task {
 	}
 	add("zephyr-open", "打开 Peapod", "回到运维驾驶舱入口。", a.cfg.PublicURL)
 	add("woodpecker-open", "打开 Woodpecker", "查看完整流水线、日志和仓库配置。", a.cfg.WoodpeckerPublicURL)
+	add("dozzle-open", "打开 Dozzle", "轻量查看本机 Docker 容器实时日志，不落地集中日志库。", a.cfg.DozzlePublicURL)
 	add("grafana-open", "打开 Grafana", "查看日志、指标、链路和仪表盘。", a.cfg.GrafanaPublicURL)
 	add("beszel-open", "打开 Beszel", "查看机器资源、磁盘、Docker 容器和资源曲线。", a.cfg.BeszelPublicURL)
 	for _, link := range a.extraExternalLinks() {
@@ -3916,13 +3931,14 @@ var docsTemplate = template.Must(template.New("docs").Parse(`<!doctype html>
 
       <article class="doc-card">
         <h2>底层系统</h2>
-        <p>Peapod 只做统一入口和轻量诊断，真正执行仍由 Woodpecker、Beszel、Grafana/Loki/Prometheus/Tempo 完成。</p>
+        <p>Peapod 只做统一入口和轻量诊断，真正执行仍由 Woodpecker、Beszel、Dozzle，以及可选 Grafana/Loki/Prometheus/Tempo 完成。</p>
         <table class="param-table">
           <thead><tr><th>系统</th><th>用途</th><th>配置</th></tr></thead>
           <tbody>
             <tr><td>Woodpecker</td><td>流水线执行、取消、日志</td><td><code>WOODPECKER_SERVER</code> / <code>WOODPECKER_TOKEN</code></td></tr>
             <tr><td>Beszel</td><td>机器资源和容器状态</td><td><code>ZEPHYR_BESZEL_*</code></td></tr>
-            <tr><td>Grafana</td><td>日志、指标、链路面板</td><td><code>ZEPHYR_GRAFANA_PUBLIC_URL</code></td></tr>
+            <tr><td>Dozzle</td><td>轻量实时 Docker 日志</td><td><code>ZEPHYR_DOZZLE_PUBLIC_URL</code></td></tr>
+            <tr><td>Grafana</td><td>完整历史日志、指标、链路面板</td><td><code>ZEPHYR_GRAFANA_PUBLIC_URL</code></td></tr>
           </tbody>
         </table>
       </article>

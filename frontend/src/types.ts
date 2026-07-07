@@ -237,6 +237,7 @@ export type RuntimeConfigInput = {
   beszel_public_url: string;
   beszel_email?: string;
   beszel_password?: string;
+  dozzle_public_url: string;
   grafana_public_url: string;
   external_links: ExternalLinkConfig[];
   monitor_hosts: MonitorHostConfig[];
