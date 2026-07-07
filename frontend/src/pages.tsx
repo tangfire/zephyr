@@ -1789,7 +1789,7 @@ export function LogsPage({ state, nowMs }: { state: StateResponse; nowMs: number
         title="日志"
         description="聚合 Docker 已保留日志，快速筛选服务、错误和请求。"
         stats={[
-          { label: "查询源", value: querySourceText, tone: activeSource === "dozzle_mcp" ? "success" : activeSource === "ssh_fallback" ? "warning" : "danger" },
+          { label: "查询源", value: querySourceText, tone: activeSource.includes("dozzle_mcp") ? "success" : activeSource === "ssh_fallback" ? "warning" : "danger" },
           { label: "容器", value: `${healthyContainers}/${summary?.container_count ?? containers.length}`, tone: healthyContainers ? "normal" : "warning" },
           { label: "保留", value: summary?.docker_retention || "20m × 3", tone: "normal" }
         ]}
@@ -2894,7 +2894,20 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [doctorRunning, setDoctorRunning] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const focusTitle = initialSection === "hosts" ? "环境与机器" : initialSection === "logs" ? "日志策略" : "接入向导";
+  const focusDescription = initialSection === "hosts"
+    ? "这里维护运维机、生产机、测试机和普通业务机。日志页会复用这些机器的 SSH 配置读取远端容器日志。"
+    : initialSection === "logs"
+      ? "这里选择轻量 Dozzle 或完整 Grafana/Loki，并配置日志入口与 Docker 日志保留策略。"
+      : "先把核心组件接起来，再逐步补齐仓库、监控、日志和部署验证。";
+  const showGuide = initialSection === "guide";
+  const showCore = initialSection === "guide";
+  const showLogs = initialSection === "logs";
+  const showHosts = initialSection === "hosts";
+  const showLinks = initialSection === "guide";
+  const showSupport = initialSection === "guide";
+  const monitorHostCount = setup?.config?.monitor_hosts?.length || 0;
 
   async function loadSetup(options: { notify?: boolean } = {}) {
     setLoading(true);
@@ -2902,6 +2915,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
       const data = await api<SetupConfigResponse>("/api/setup/config");
       setSetup(data);
       form.setFieldsValue(normalizeSetupFormValues(data.config));
+      setDirty(false);
       if (options.notify) message.success("接入配置已刷新");
     } catch (error) {
       message.error(errorText(error) || "接入配置加载失败");
@@ -2924,6 +2938,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
       });
       setSetup(data);
       form.setFieldsValue(normalizeSetupFormValues(data.config));
+      setDirty(false);
       message.success("接入配置已保存");
       await onReload();
     } catch (error) {
@@ -2948,21 +2963,76 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
 
   return (
     <Space direction="vertical" size={16} className="side-stack">
-      <Alert
-        type="info"
-        showIcon
-        message={`${focusTitle}配置`}
-        description="URL、监控主机、外部入口和日志策略会回显；token、密码和告警 webhook 只显示是否已配置，留空保存会保留原值。"
-      />
-      <SetupGuidePanel
-        setup={setup}
-        loading={loading}
-        doctorRunning={doctorRunning}
-        onRefresh={() => loadSetup({ notify: true })}
-        onDoctorRun={runDoctor}
-      />
-      <Form form={form} layout="vertical" onFinish={save} disabled={loading}>
-        {initialSection === "guide" && (
+      {showGuide ? (
+        <SetupGuidePanel
+          setup={setup}
+          loading={loading}
+          doctorRunning={doctorRunning}
+          onRefresh={() => loadSetup({ notify: true })}
+          onDoctorRun={runDoctor}
+        />
+      ) : (
+        <ProCard className="setup-context-card">
+          <Row gutter={[14, 14]} align="middle">
+            <Col xs={24} lg={showLogs ? 14 : 16}>
+              <Space direction="vertical" size={4} className="side-stack">
+                <Space wrap>
+                  <Tag color={showHosts ? "blue" : "green"}>{focusTitle}</Tag>
+                  {dirty && <Tag color="gold">有未保存修改</Tag>}
+                </Space>
+                <Text strong>{focusTitle}配置</Text>
+                <Text type="secondary">{focusDescription}</Text>
+              </Space>
+            </Col>
+            {showHosts && (
+              <Col xs={24} lg={8}>
+                <Row gutter={8}>
+                  <Col span={12}>
+                    <Card size="small" className="setup-metric-card">
+                      <Text type="secondary">被管机器</Text>
+                      <Title level={4}>{monitorHostCount}</Title>
+                    </Card>
+                  </Col>
+                  <Col span={12}>
+                    <Card size="small" className="setup-metric-card">
+                      <Text type="secondary">刷新间隔</Text>
+                      <Title level={4}>{setup?.config?.monitor_refresh_seconds || 20}s</Title>
+                    </Card>
+                  </Col>
+                </Row>
+              </Col>
+            )}
+            {showLogs && setup?.log_strategy && (
+              <Col xs={24} lg={10}>
+                <LogStrategyCard status={setup.log_strategy} compact />
+              </Col>
+            )}
+          </Row>
+        </ProCard>
+      )}
+      <Form form={form} layout="vertical" onFinish={save} disabled={loading} onValuesChange={() => setDirty(true)}>
+        <div className="setup-action-bar">
+          <Space direction="vertical" size={2}>
+            <Text strong>{focusTitle}</Text>
+            <Text type="secondary">{showSupport ? "Secret 留空保存会保留原值。" : "只保存当前表单里显示的配置项，Secret 留空会保留原值。"}</Text>
+          </Space>
+          <Space wrap className="setup-action-buttons">
+            {dirty && <Tag color="gold">待保存</Tag>}
+            <Button icon={<RefreshCw size={16} />} loading={loading} onClick={() => loadSetup({ notify: true })}>
+              刷新
+            </Button>
+            {showGuide && (
+              <Button icon={<Gauge size={16} />} loading={doctorRunning} onClick={runDoctor}>
+                体检
+              </Button>
+            )}
+            <Button type="primary" htmlType="submit" loading={saving}>
+              保存{focusTitle}
+            </Button>
+          </Space>
+        </div>
+
+        {showCore && (
         <ProCard title="核心服务" className="setup-form-card">
           <Row gutter={12}>
             <Col xs={24} lg={8}>
@@ -3021,7 +3091,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
         </ProCard>
         )}
 
-        {initialSection !== "hosts" && (
+        {showLogs && (
         <ProCard title="日志策略" className="setup-form-card">
           <Row gutter={12}>
             <Col xs={24} lg={8}>
@@ -3076,7 +3146,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
         </ProCard>
         )}
 
-        {initialSection !== "logs" && (
+        {showHosts && (
         <ProCard title="监控阈值" className="setup-form-card">
           <Row gutter={12}>
             <Col xs={12} lg={6}>
@@ -3103,7 +3173,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
         </ProCard>
         )}
 
-        {initialSection !== "logs" && (
+        {showHosts && (
         <ProCard
           title="被管机器"
           className="setup-form-card"
@@ -3183,7 +3253,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
         </ProCard>
         )}
 
-        {initialSection === "guide" && (
+        {showLinks && (
         <ProCard
           title="外部入口"
           className="setup-form-card"
@@ -3237,11 +3307,14 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
         </ProCard>
         )}
 
-        <Button type="primary" htmlType="submit" loading={saving} size="large">
-          保存接入配置
-        </Button>
+        <div className="setup-action-footer">
+          <Button type="primary" htmlType="submit" loading={saving} size="large">
+            保存{focusTitle}
+          </Button>
+        </div>
       </Form>
 
+      {showSupport && (
       <ProCard title="业务机接入命令">
         <Row gutter={[12, 12]}>
           {(setup?.commands || []).map((item) => (
@@ -3258,7 +3331,9 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
           ))}
         </Row>
       </ProCard>
+      )}
 
+      {showSupport && (
       <ProCard title="文档">
         <List
           dataSource={setup?.docs || []}
@@ -3269,6 +3344,7 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
           )}
         />
       </ProCard>
+      )}
     </Space>
   );
 }
@@ -3651,6 +3727,7 @@ function isOpaqueLogHostID(value: string): boolean {
 
 function logSourceText(source: string): string {
   if (source === "dozzle_mcp") return "Dozzle MCP";
+  if (source === "dozzle_mcp+ssh_fallback") return "Dozzle + SSH";
   if (source === "ssh_fallback") return "SSH 兜底";
   if (source === "monitoring_fallback") return "监控列表";
   if (source === "degraded") return "已降级";
@@ -3659,6 +3736,7 @@ function logSourceText(source: string): string {
 
 function logSourceColor(source: string): string {
   if (source === "dozzle_mcp") return "success";
+  if (source === "dozzle_mcp+ssh_fallback") return "success";
   if (source === "ssh_fallback" || source === "monitoring_fallback") return "gold";
   if (source === "degraded") return "error";
   return "default";

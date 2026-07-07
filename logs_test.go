@@ -72,6 +72,40 @@ func TestDozzleSingleOpaqueHostPrefersOperationsHost(t *testing.T) {
 	}
 }
 
+func TestMergeLogContainersKeepsRemoteHostsWhenDozzleIsHealthy(t *testing.T) {
+	dozzle := []LogContainer{
+		{ID: "abc", Name: "peapod", Host: "opaque-host-id", HostName: "Peapod 运维/测试构建机", State: "running", Source: "dozzle_mcp"},
+	}
+	monitoring := []LogContainer{
+		{ID: "peapod", Name: "peapod", Host: "ops-test-builder", HostName: "Peapod 运维/测试构建机", State: "running", Source: "monitoring_fallback"},
+		{ID: "novel-factory-api-green", Name: "novel-factory-api-green", Host: "novel-production", HostName: "写书猫生产机", State: "running", Source: "monitoring_fallback"},
+	}
+
+	merged := mergeLogContainers(dozzle, monitoring)
+	if len(merged) != 2 {
+		t.Fatalf("merged len = %d, want 2: %+v", len(merged), merged)
+	}
+	if !hasNonDozzleLogContainers(merged) {
+		t.Fatalf("expected merged containers to include remote fallback source: %+v", merged)
+	}
+	for _, item := range merged {
+		if item.Name == "peapod" && item.Source != "dozzle_mcp" {
+			t.Fatalf("local duplicate should keep Dozzle source, got %+v", item)
+		}
+	}
+}
+
+func TestSelectLogContainersMatchesRemoteSelector(t *testing.T) {
+	containers := []LogContainer{
+		{ID: "abc", Name: "peapod", Host: "ops-test-builder", HostName: "Peapod 运维/测试构建机", State: "running", Source: "dozzle_mcp"},
+		{ID: "novel-factory-api-green", Name: "novel-factory-api-green", Host: "novel-production", HostName: "写书猫生产机", State: "running", Source: "monitoring_fallback"},
+	}
+	selected := selectLogContainers(containers, LogQueryRequest{Containers: []string{"novel-production|novel-factory-api-green"}})
+	if len(selected) != 1 || selected[0].Host != "novel-production" {
+		t.Fatalf("unexpected selected containers: %+v", selected)
+	}
+}
+
 func TestDozzleMCPClientCallToolText(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/mcp" {

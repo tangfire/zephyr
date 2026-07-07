@@ -207,18 +207,10 @@ func (a *App) logsQuery(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), logQueryTimeout)
 	defer cancel()
 
-	lines, containers, degraded, err := a.queryDozzleLogs(ctx, input)
-	source := "dozzle_mcp"
+	lines, containers, source, degraded, err := a.queryMergedLogs(ctx, input)
 	if err != nil {
-		fallbackLines, fallbackContainers, fallbackErr := a.querySSHFallbackLogs(ctx, input)
-		if fallbackErr != nil {
-			writeError(w, http.StatusBadGateway, "日志查询不可用", err.Error(), fallbackErr.Error())
-			return
-		}
-		lines = fallbackLines
-		containers = fallbackContainers
-		source = "ssh_fallback"
-		degraded = "Dozzle MCP 不可用，已使用 SSH 只读 docker logs 兜底：" + err.Error()
+		writeError(w, http.StatusBadGateway, "日志查询不可用", err.Error())
+		return
 	}
 	lines = filterAndLimitLogLines(lines, input)
 	writeJSON(w, LogQueryResponse{
@@ -286,15 +278,69 @@ func cleanStringList(values []string) []string {
 }
 
 func (a *App) listLogContainers(ctx context.Context) ([]LogContainer, string, string) {
-	containers, err := a.listDozzleContainers(ctx)
+	dozzleContainers, err := a.listDozzleContainers(ctx)
+	monitoringContainers := a.monitoringLogContainers(ctx)
 	if err == nil {
-		return containers, "dozzle_mcp", ""
+		containers := mergeLogContainers(dozzleContainers, monitoringContainers)
+		source := "dozzle_mcp"
+		if hasNonDozzleLogContainers(containers) {
+			source = "dozzle_mcp+ssh_fallback"
+		}
+		return containers, source, ""
 	}
-	fallback := a.monitoringLogContainers(ctx)
-	if len(fallback) > 0 {
-		return fallback, "monitoring_fallback", "Dozzle MCP 不可用，已退回监控容器列表：" + err.Error()
+	if len(monitoringContainers) > 0 {
+		return monitoringContainers, "monitoring_fallback", "Dozzle MCP 不可用，已退回监控容器列表：" + err.Error()
 	}
 	return []LogContainer{}, "degraded", "Dozzle MCP 不可用，且没有可用的监控容器列表：" + err.Error()
+}
+
+func mergeLogContainers(primary []LogContainer, secondary []LogContainer) []LogContainer {
+	out := make([]LogContainer, 0, len(primary)+len(secondary))
+	seen := map[string]bool{}
+	add := func(item LogContainer) {
+		keys := logContainerDedupeKeys(item)
+		for _, key := range keys {
+			if seen[key] {
+				return
+			}
+		}
+		out = append(out, item)
+		for _, key := range keys {
+			seen[key] = true
+		}
+	}
+	for _, item := range primary {
+		add(item)
+	}
+	for _, item := range secondary {
+		add(item)
+	}
+	sortLogContainers(out)
+	return out
+}
+
+func logContainerDedupeKeys(item LogContainer) []string {
+	name := strings.ToLower(strings.TrimSpace(firstNonEmpty(item.Name, item.ID)))
+	if name == "" {
+		return []string{}
+	}
+	values := []string{}
+	for _, host := range []string{item.Host, item.HostName} {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if host != "" {
+			values = append(values, host+"|"+name)
+		}
+	}
+	return values
+}
+
+func hasNonDozzleLogContainers(containers []LogContainer) bool {
+	for _, item := range containers {
+		if item.Source != "dozzle_mcp" {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) listDozzleContainers(ctx context.Context) ([]LogContainer, error) {
@@ -370,8 +416,74 @@ func (a *App) queryDozzleLogs(ctx context.Context, input LogQueryRequest) ([]Log
 		return nil, nil, "", err
 	}
 	selected := selectLogContainers(containers, input)
+	lines, degraded, err := a.queryDozzleSelectedLogs(ctx, client, selected, input)
+	return lines, selected, degraded, err
+}
+
+func (a *App) queryMergedLogs(ctx context.Context, input LogQueryRequest) ([]LogLine, []LogContainer, string, string, error) {
+	client := newDozzleMCPClient(a.cfg.DozzleBaseURL, a.client)
+	dozzleContainers, dozzleErr := a.listDozzleContainersWithClient(ctx, client)
+	monitoringContainers := a.monitoringLogContainers(ctx)
+	if dozzleErr != nil {
+		lines, containers, err := a.querySSHSelectedLogs(ctx, input, selectLogContainers(monitoringContainers, input))
+		if err != nil {
+			return nil, containers, "degraded", "", fmt.Errorf("Dozzle MCP 不可用，SSH 兜底也失败：%s；%s", dozzleErr.Error(), err.Error())
+		}
+		return lines, containers, "ssh_fallback", "Dozzle MCP 不可用，已使用 SSH 只读 docker logs 兜底：" + dozzleErr.Error(), nil
+	}
+
+	allContainers := mergeLogContainers(dozzleContainers, monitoringContainers)
+	selected := selectLogContainers(allContainers, input)
 	if len(selected) == 0 {
-		return []LogLine{}, selected, "", nil
+		return []LogLine{}, selected, "dozzle_mcp", "", nil
+	}
+
+	dozzleSelected := make([]LogContainer, 0, len(selected))
+	sshSelected := make([]LogContainer, 0, len(selected))
+	for _, item := range selected {
+		if item.Source == "dozzle_mcp" {
+			dozzleSelected = append(dozzleSelected, item)
+			continue
+		}
+		sshSelected = append(sshSelected, item)
+	}
+
+	lines := []LogLine{}
+	degradedParts := []string{}
+	if len(dozzleSelected) > 0 {
+		dozzleLines, degraded, err := a.queryDozzleSelectedLogs(ctx, client, dozzleSelected, input)
+		lines = append(lines, dozzleLines...)
+		if degraded != "" {
+			degradedParts = append(degradedParts, degraded)
+		}
+		if err != nil {
+			degradedParts = append(degradedParts, "Dozzle 查询失败："+err.Error())
+		}
+	}
+	if len(sshSelected) > 0 {
+		sshLines, _, err := a.querySSHSelectedLogs(ctx, input, sshSelected)
+		lines = append(lines, sshLines...)
+		if err != nil {
+			degradedParts = append(degradedParts, "远端 SSH 日志查询失败："+err.Error())
+		}
+	}
+
+	source := "dozzle_mcp"
+	if len(dozzleSelected) > 0 && len(sshSelected) > 0 {
+		source = "dozzle_mcp+ssh_fallback"
+	} else if len(sshSelected) > 0 {
+		source = "ssh_fallback"
+	}
+	degraded := strings.Join(degradedParts, "；")
+	if len(lines) == 0 && degraded != "" {
+		return nil, selected, source, degraded, errors.New(degraded)
+	}
+	return lines, selected, source, degraded, nil
+}
+
+func (a *App) queryDozzleSelectedLogs(ctx context.Context, client *dozzleMCPClient, selected []LogContainer, input LogQueryRequest) ([]LogLine, string, error) {
+	if len(selected) == 0 {
+		return []LogLine{}, "", nil
 	}
 	lines := []LogLine{}
 	errorsByContainer := []string{}
@@ -394,9 +506,9 @@ func (a *App) queryDozzleLogs(ctx context.Context, input LogQueryRequest) ([]Log
 		degraded = strings.Join(errorsByContainer, "；")
 	}
 	if len(lines) == 0 && len(errorsByContainer) > 0 {
-		return nil, selected, degraded, errors.New(degraded)
+		return nil, degraded, errors.New(degraded)
 	}
-	return lines, selected, degraded, nil
+	return lines, degraded, nil
 }
 
 func (a *App) listDozzleContainersWithClient(ctx context.Context, client *dozzleMCPClient) ([]LogContainer, error) {
@@ -703,6 +815,10 @@ func maskSensitiveLogText(text string) string {
 
 func (a *App) querySSHFallbackLogs(ctx context.Context, input LogQueryRequest) ([]LogLine, []LogContainer, error) {
 	containers := selectLogContainers(a.monitoringLogContainers(ctx), input)
+	return a.querySSHSelectedLogs(ctx, input, containers)
+}
+
+func (a *App) querySSHSelectedLogs(ctx context.Context, input LogQueryRequest, containers []LogContainer) ([]LogLine, []LogContainer, error) {
 	if len(containers) == 0 {
 		return nil, nil, errors.New("没有可用于 SSH 日志兜底的容器")
 	}

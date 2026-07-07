@@ -245,6 +245,53 @@ body {
   margin-bottom: 14px;
 }
 
+.setup-context-card {
+  border-color: #e0e7db;
+  background: #fbfdf9;
+}
+
+.setup-context-card .ant-card {
+  height: 100%;
+}
+
+.setup-metric-card .ant-card-body {
+  display: flex;
+  min-height: 84px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.setup-metric-card .ant-typography {
+  margin: 0;
+}
+
+.setup-action-bar {
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #dfe7dc;
+  border-radius: 10px;
+  box-shadow: 0 8px 22px rgba(43, 52, 39, 0.08);
+  backdrop-filter: blur(10px);
+}
+
+.setup-action-buttons {
+  justify-content: flex-end;
+}
+
+.setup-action-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
 .command-block {
   margin: 0 !important;
   padding: 10px 12px;
@@ -1605,6 +1652,17 @@ body {
 
   .settings-mobile-content {
     min-width: 0;
+  }
+
+  .setup-action-bar {
+    position: static;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .setup-action-buttons,
+  .setup-action-buttons .ant-btn {
+    width: 100%;
   }
 
   .profile-grid {
