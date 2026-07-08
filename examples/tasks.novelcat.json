@@ -205,6 +205,8 @@
       "risk": "normal",
       "variables": {
         "DEPLOY_ACTION": "deploy",
+        "MYSQL_HOST_BIND": "127.0.0.1",
+        "MYSQL_HOST_PORT": "33307",
         "PEAPOD_PROJECT_ID": "estack",
         "PEAPOD_PROJECT_NAME": "e站后端",
         "PEAPOD_DEPLOY_MARKER_PATH": "/opt/lehu-campus/.deploy/current-sha"
@@ -222,6 +224,8 @@
       "confirm_text": "ROLLBACK",
       "variables": {
         "DEPLOY_ACTION": "rollback",
+        "MYSQL_HOST_BIND": "127.0.0.1",
+        "MYSQL_HOST_PORT": "33307",
         "PEAPOD_PROJECT_ID": "estack",
         "PEAPOD_PROJECT_NAME": "e站后端",
         "PEAPOD_DEPLOY_MARKER_PATH": "/opt/lehu-campus/.deploy/current-sha"
@@ -239,6 +243,8 @@
       "confirm_text": "RESTART",
       "variables": {
         "DEPLOY_ACTION": "restart",
+        "MYSQL_HOST_BIND": "127.0.0.1",
+        "MYSQL_HOST_PORT": "33307",
         "PEAPOD_PROJECT_ID": "estack",
         "PEAPOD_PROJECT_NAME": "e站后端"
       }
