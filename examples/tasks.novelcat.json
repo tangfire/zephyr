@@ -77,22 +77,6 @@
       }
     },
     {
-      "id": "xzm-observability",
-      "group": "观测平台",
-      "title": "部署观测平台",
-      "description": "刷新 Grafana/Loki/Tempo/Prometheus 配置。",
-      "repo_id": 1,
-      "repo_name": "tangfire/xiezuomao-novel-factory",
-      "branch": "main",
-      "risk": "warning",
-      "confirm_text": "OBS",
-      "variables": {
-        "DEPLOY_ACTION": "observability",
-        "PEAPOD_PROJECT_ID": "xzm-observability",
-        "PEAPOD_PROJECT_NAME": "观测平台"
-      }
-    },
-    {
       "id": "peapod-status",
       "group": "Pedpod",
       "title": "检查 Pedpod 状态",

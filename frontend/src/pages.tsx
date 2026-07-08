@@ -5478,7 +5478,7 @@ function isDeploymentLikeTask(task: Task): boolean {
   if (isCleanupTask(task) || isRestartTask(task)) return false;
   if (isRollbackTask(task)) return true;
   const action = String(task.variables?.DEPLOY_ACTION || "").toLowerCase();
-  if (["deploy", "site", "observability", "publish", "release", "zefire", "zephyr", "peapod"].includes(action)) return true;
+  if (["deploy", "site", "publish", "release", "zefire", "zephyr", "peapod"].includes(action)) return true;
   return /部署|发布|deploy|publish|release/i.test(task.title);
 }
 
