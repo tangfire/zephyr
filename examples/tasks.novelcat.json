@@ -206,7 +206,8 @@
       "variables": {
         "DEPLOY_ACTION": "deploy",
         "PEAPOD_PROJECT_ID": "estack",
-        "PEAPOD_PROJECT_NAME": "e站后端"
+        "PEAPOD_PROJECT_NAME": "e站后端",
+        "PEAPOD_DEPLOY_MARKER_PATH": "/opt/lehu-campus/.deploy/current-sha"
       }
     },
     {
@@ -222,7 +223,8 @@
       "variables": {
         "DEPLOY_ACTION": "rollback",
         "PEAPOD_PROJECT_ID": "estack",
-        "PEAPOD_PROJECT_NAME": "e站后端"
+        "PEAPOD_PROJECT_NAME": "e站后端",
+        "PEAPOD_DEPLOY_MARKER_PATH": "/opt/lehu-campus/.deploy/current-sha"
       }
     },
     {
@@ -272,7 +274,8 @@
         "DEPLOY_ACTION": "deploy",
         "DEPLOY_TARGET": "builder",
         "PEAPOD_PROJECT_ID": "router-builder",
-        "PEAPOD_PROJECT_NAME": "测试/构建机 9router"
+        "PEAPOD_PROJECT_NAME": "测试/构建机 9router",
+        "PEAPOD_DEPLOY_MARKER_PATH": "/opt/9router-mod/.deploy/current-source-sha"
       }
     },
     {
@@ -289,7 +292,8 @@
         "DEPLOY_ACTION": "rollback",
         "DEPLOY_TARGET": "builder",
         "PEAPOD_PROJECT_ID": "router-builder",
-        "PEAPOD_PROJECT_NAME": "测试/构建机 9router"
+        "PEAPOD_PROJECT_NAME": "测试/构建机 9router",
+        "PEAPOD_DEPLOY_MARKER_PATH": "/opt/9router-mod/.deploy/current-source-sha"
       },
       "inputs": [
         {
@@ -314,7 +318,8 @@
         "DEPLOY_ACTION": "deploy",
         "DEPLOY_TARGET": "production",
         "PEAPOD_PROJECT_ID": "router-production",
-        "PEAPOD_PROJECT_NAME": "生产机 9router"
+        "PEAPOD_PROJECT_NAME": "生产机 9router",
+        "PEAPOD_DEPLOY_MARKER_PATH": "/opt/woodpecker-cache/9router-production-meta/current-source-sha"
       }
     },
     {
@@ -331,7 +336,8 @@
         "DEPLOY_ACTION": "rollback",
         "DEPLOY_TARGET": "production",
         "PEAPOD_PROJECT_ID": "router-production",
-        "PEAPOD_PROJECT_NAME": "生产机 9router"
+        "PEAPOD_PROJECT_NAME": "生产机 9router",
+        "PEAPOD_DEPLOY_MARKER_PATH": "/opt/woodpecker-cache/9router-production-meta/current-source-sha"
       },
       "inputs": [
         {
