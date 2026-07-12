@@ -140,7 +140,7 @@ func (a *App) monitoringSummary(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 18*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	writeJSON(w, a.monitor.Summary(ctx))
 }
@@ -570,9 +570,9 @@ docker ps --format '{{.Names}}	{{.Status}}' 2>/dev/null
 printf "__STATS__\n"
 docker stats --no-stream --format '{{.Name}}	{{.CPUPerc}}	{{.MemUsage}}' 2>/dev/null
 printf "__DOCKER_DF__\n"
-docker system df 2>/dev/null
+timeout 5 docker system df 2>/dev/null
 printf "__DU__\n"
-du -sh /var/lib/docker /opt /tmp /var/log /root 2>/dev/null
+timeout 10 du -sh /var/lib/docker /opt /tmp /var/log /root 2>/dev/null
 exit 0
 `
 
