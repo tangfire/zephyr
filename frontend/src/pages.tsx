@@ -2386,7 +2386,7 @@ function DiskDiagnosisDrawer({
       fetchDiskDiagnosis().then(setDiagnosis),
       fetchDiskCleanupPreview().then(setPreview),
       api<{ config: { monitor_auto_cleanup_level: string; monitor_auto_cleanup_disk: number } }>("/api/setup/config").then(
-        (data) => setAutoCleanupConfig(data.config)
+        (data) => setAutoCleanupConfig({ level: data.config.monitor_auto_cleanup_level, disk: data.config.monitor_auto_cleanup_disk })
       ).catch(() => {})
     ]).finally(() => setLoading(false));
   }, [open]);
@@ -2450,8 +2450,8 @@ function DiskDiagnosisDrawer({
             </Card>
           )}
           {(diagnosis?.images || []).length > 0 && (
-            <Card size="small" title={`大镜像排行（前 ${diagnosis.images.length}）`}>
-              <List size="small" dataSource={diagnosis.images} renderItem={(item) => (
+            <Card size="small" title={`大镜像排行（前 ${(diagnosis!.images || []).length}）`}>
+              <List size="small" dataSource={diagnosis!.images!} renderItem={(item) => (
                 <List.Item>
                   <Space direction="vertical" size={0} style={{ width: "100%" }}>
                     <Space>
@@ -2466,14 +2466,14 @@ function DiskDiagnosisDrawer({
           )}
           {(diagnosis?.volumes || []).filter((v) => v.orphan).length > 0 && (
             <Card size="small" title="孤儿卷">
-              <List size="small" dataSource={diagnosis.volumes.filter((v) => v.orphan)} renderItem={(item) => (
+              <List size="small" dataSource={diagnosis!.volumes!.filter((v) => v.orphan)} renderItem={(item) => (
                 <List.Item><Text code>{item.name}</Text><Text type="secondary">{item.driver}</Text></List.Item>
               )} />
             </Card>
           )}
           {(diagnosis?.log_files || []).length > 0 && (
             <Card size="small" title="容器日志文件（前 10）">
-              <List size="small" dataSource={diagnosis.log_files} renderItem={(item) => (
+              <List size="small" dataSource={diagnosis!.log_files!} renderItem={(item) => (
                 <List.Item><Text code>{item.path.split("/").pop()}</Text><Text>{item.size}</Text></List.Item>
               )} />
             </Card>

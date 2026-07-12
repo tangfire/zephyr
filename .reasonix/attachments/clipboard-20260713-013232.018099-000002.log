@@ -1,0 +1,116 @@
++ set -euo pipefail
++ sh scripts/deploy-peapod-docker.sh
+#1 [internal] load local bake definitions
+#1 reading from stdin 473B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 974B done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
+#3 DONE 0.5s
+
+#4 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/alpine:3.20
+#5 ...
+
+#6 [internal] load metadata for docker.io/library/golang:1.25-alpine
+#6 DONE 0.0s
+
+#7 [internal] load metadata for docker.io/library/node:22-alpine
+#7 DONE 0.3s
+
+#5 [internal] load metadata for docker.io/library/alpine:3.20
+#5 DONE 0.3s
+
+#8 [internal] load .dockerignore
+#8 transferring context: 190B done
+#8 DONE 0.0s
+
+#9 [builder 1/6] FROM docker.io/library/golang:1.25-alpine
+#9 DONE 0.0s
+
+#10 [frontend 1/6] FROM docker.io/library/node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
+#10 DONE 0.0s
+
+#11 [stage-2 1/6] FROM docker.io/library/alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
+#11 DONE 0.0s
+
+#12 [internal] load build context
+#12 transferring context: 17.32MB 0.1s done
+#12 DONE 0.1s
+
+#13 [builder 2/6] WORKDIR /src
+#13 CACHED
+
+#14 [builder 3/6] COPY go.mod go.sum ./
+#14 CACHED
+
+#15 [builder 4/6] RUN --mount=type=cache,target=/go/pkg/mod go mod download
+#15 CACHED
+
+#16 [frontend 2/6] WORKDIR /src/frontend
+#16 CACHED
+
+#17 [frontend 3/6] COPY frontend/package*.json ./
+#17 CACHED
+
+#18 [frontend 4/6] RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+#18 CACHED
+
+#19 [frontend 5/6] COPY frontend ./
+#19 DONE 0.1s
+
+#20 [frontend 6/6] RUN npm run build
+#20 ...
+
+#21 [builder 5/6] COPY . .
+#21 DONE 0.1s
+
+#22 [builder 6/6] RUN --mount=type=cache,target=/go/pkg/mod     --mount=type=cache,target=/root/.cache/go-build     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/peapod .
+#22 DONE 2.8s
+
+#20 [frontend 6/6] RUN npm run build
+#20 1.472 
+#20 1.472 > peapod-frontend@0.1.0 build
+#20 1.472 > tsc -b && vite build
+#20 1.472 
+#20 ...
+
+#23 [stage-2 2/6] RUN apk add --no-cache su-exec && adduser -D -H -u 10001 app
+#23 CACHED
+
+#24 [stage-2 3/6] WORKDIR /app
+#24 CACHED
+
+#25 [stage-2 4/6] COPY --from=builder /out/peapod /app/peapod
+#25 DONE 0.0s
+
+#20 [frontend 6/6] RUN npm run build
+#20 7.772 src/pages.tsx(2389,40): error TS2345: Argument of type '{ monitor_auto_cleanup_level: string; monitor_auto_cleanup_disk: number; }' is not assignable to parameter of type 'SetStateAction<{ level: string; disk: number; } | null>'.
+#20 7.772 src/pages.tsx(2453,50): error TS18047: 'diagnosis' is possibly 'null'.
+#20 7.773 src/pages.tsx(2453,50): error TS18048: 'diagnosis.images' is possibly 'undefined'.
+#20 7.773 src/pages.tsx(2454,46): error TS18047: 'diagnosis' is possibly 'null'.
+#20 7.773 src/pages.tsx(2469,46): error TS18047: 'diagnosis' is possibly 'null'.
+#20 7.773 src/pages.tsx(2469,46): error TS18048: 'diagnosis.volumes' is possibly 'undefined'.
+#20 7.773 src/pages.tsx(2476,46): error TS18047: 'diagnosis' is possibly 'null'.
+#20 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [frontend 6/6] RUN npm run build:
+1.472 > peapod-frontend@0.1.0 build
+1.472 > tsc -b && vite build
+1.472 
+7.772 src/pages.tsx(2389,40): error TS2345: Argument of type '{ monitor_auto_cleanup_level: string; monitor_auto_cleanup_disk: number; }' is not assignable to parameter of type 'SetStateAction<{ level: string; disk: number; } | null>'.
+7.772 src/pages.tsx(2453,50): error TS18047: 'diagnosis' is possibly 'null'.
+7.773 src/pages.tsx(2453,50): error TS18048: 'diagnosis.images' is possibly 'undefined'.
+7.773 src/pages.tsx(2454,46): error TS18047: 'diagnosis' is possibly 'null'.
+7.773 src/pages.tsx(2469,46): error TS18047: 'diagnosis' is possibly 'null'.
+7.773 src/pages.tsx(2469,46): error TS18048: 'diagnosis.volumes' is possibly 'undefined'.
+7.773 src/pages.tsx(2476,46): error TS18047: 'diagnosis' is possibly 'null'.
+------
+WARNING: current commit information was not captured by the build: failed to read current commit information with git rev-parse --is-inside-work-tree
+
+failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
