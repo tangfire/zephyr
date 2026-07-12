@@ -5131,8 +5131,7 @@ function repoNameByID(state: StateResponse, repoID: number): string {
 function productText(value?: string): string {
   return String(value || "")
     .replace(/Zefire(?:\s+(?:Deploy|Cloud))?/g, PRODUCT_NAME)
-    .replace(/Zephyr/g, PRODUCT_NAME)
-    .replace(/Peapod/g, PRODUCT_NAME);
+    .replace(/Zephyr/g, PRODUCT_NAME);
 }
 
 function riskLabel(risk: Risk): string {

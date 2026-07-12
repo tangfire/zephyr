@@ -6,6 +6,8 @@ docker-compose.override.yml
 data/
 mysql-data/
 zephyr
+peapod.exe
+.reasonix/
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo

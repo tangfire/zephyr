@@ -27,7 +27,6 @@ import (
 )
 
 const cookieName = "peapod_session"
-const productName = "Pedpod"
 
 type authUserContextKey struct{}
 
@@ -1623,29 +1622,8 @@ func (a *App) templateAction(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	cfg, err := a.loadCustomTaskConfig()
+	cfg, err := a.upsertTaskIntoConfig(task)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
-	}
-	if cfg.Repos == nil {
-		cfg.Repos = map[int]string{}
-	}
-	if task.RepoName != "" {
-		cfg.Repos[task.RepoID] = task.RepoName
-	}
-	replaced := false
-	for i := range cfg.Tasks {
-		if cfg.Tasks[i].ID == task.ID {
-			cfg.Tasks[i] = task
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		cfg.Tasks = append(cfg.Tasks, task)
-	}
-	if err := a.saveCustomTaskConfig(cfg); err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -1805,29 +1783,8 @@ func (a *App) customTasks(w http.ResponseWriter, r *http.Request) {
 			task.Builtin = false
 			task.Overridden = false
 		}
-		cfg, err := a.loadCustomTaskConfig()
+		_, err := a.upsertTaskIntoConfig(task)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		if cfg.Repos == nil {
-			cfg.Repos = map[int]string{}
-		}
-		if task.RepoName != "" {
-			cfg.Repos[task.RepoID] = task.RepoName
-		}
-		replaced := false
-		for i := range cfg.Tasks {
-			if cfg.Tasks[i].ID == task.ID {
-				cfg.Tasks[i] = task
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			cfg.Tasks = append(cfg.Tasks, task)
-		}
-		if err := a.saveCustomTaskConfig(cfg); err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -4164,7 +4121,7 @@ func dockerDiskDoctorCheck(id string, title string) DoctorCheck {
 	reclaimGB := uint64(totalReclaimable / (1024 * 1024 * 1024))
 	message := fmt.Sprintf("Docker 可回收约 %d GB", reclaimGB)
 	if reclaimGB > 20 {
-		return DoctorCheck{ID: id, Title: title, Status: "warning", Severity: "warning", Message: message, Fix: "运行 docker system prune 或通过 Peapod 磁盘清理任务回收空间"}
+		return DoctorCheck{ID: id, Title: title, Status: "warning", Severity: "warning", Message: message, Fix: "运行 docker system prune 或通过 Pedpod 磁盘清理任务回收空间"}
 	}
 	return DoctorCheck{ID: id, Title: title, Status: "ok", Severity: "ok", Message: message}
 }
@@ -4992,6 +4949,37 @@ func (a *App) saveConfiguredRepo(repoID int, repoName string) error {
 	}
 	cfg.Repos[repoID] = repoName
 	return a.saveCustomTaskConfig(cfg)
+}
+
+// upsertTaskIntoConfig loads the custom task configuration, merges the given task
+// (replacing any existing task with the same ID), records its repo mapping, and
+// persists the result. It returns the saved configuration.
+func (a *App) upsertTaskIntoConfig(task Task) (CustomTaskConfig, error) {
+	cfg, err := a.loadCustomTaskConfig()
+	if err != nil {
+		return cfg, err
+	}
+	if cfg.Repos == nil {
+		cfg.Repos = map[int]string{}
+	}
+	if task.RepoName != "" {
+		cfg.Repos[task.RepoID] = task.RepoName
+	}
+	replaced := false
+	for i := range cfg.Tasks {
+		if cfg.Tasks[i].ID == task.ID {
+			cfg.Tasks[i] = task
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		cfg.Tasks = append(cfg.Tasks, task)
+	}
+	if err := a.saveCustomTaskConfig(cfg); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
 }
 
 func taskTemplates() []TaskTemplate {
