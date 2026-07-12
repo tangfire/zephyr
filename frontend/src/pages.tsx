@@ -2438,6 +2438,46 @@ function DiskDiagnosisDrawer({
               </Descriptions>
             </Card>
           )}
+          {diagnosis?.waste_breakdown && (
+            <Card size="small" title="可回收空间汇总">
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label="构建缓存">{diagnosis.waste_breakdown.build_cache || "0B"}</Descriptions.Item>
+                <Descriptions.Item label="悬空镜像">{diagnosis.waste_breakdown.dangling_images || "0B"}</Descriptions.Item>
+                <Descriptions.Item label="孤儿卷">{diagnosis.waste_breakdown.orphan_volumes || "0B"}</Descriptions.Item>
+                <Descriptions.Item label="容器日志">{diagnosis.waste_breakdown.container_logs || "0B"}</Descriptions.Item>
+                <Descriptions.Item label={<Text strong>总计可回收</Text>}>{diagnosis.waste_breakdown.total_reclaimable}</Descriptions.Item>
+              </Descriptions>
+            </Card>
+          )}
+          {(diagnosis?.images || []).length > 0 && (
+            <Card size="small" title={`大镜像排行（前 ${diagnosis.images.length}）`}>
+              <List size="small" dataSource={diagnosis.images} renderItem={(item) => (
+                <List.Item>
+                  <Space direction="vertical" size={0} style={{ width: "100%" }}>
+                    <Space>
+                      <Text code ellipsis style={{ maxWidth: 260 }}>{item.dangling ? "<none>:<none>" : `${item.repository}:${item.tag}`}</Text>
+                      {item.dangling && <Tag color="orange">悬空</Tag>}
+                    </Space>
+                    <Text type="secondary">{item.size} · {item.id.slice(0, 12)}</Text>
+                  </Space>
+                </List.Item>
+              )} />
+            </Card>
+          )}
+          {(diagnosis?.volumes || []).filter((v) => v.orphan).length > 0 && (
+            <Card size="small" title="孤儿卷">
+              <List size="small" dataSource={diagnosis.volumes.filter((v) => v.orphan)} renderItem={(item) => (
+                <List.Item><Text code>{item.name}</Text><Text type="secondary">{item.driver}</Text></List.Item>
+              )} />
+            </Card>
+          )}
+          {(diagnosis?.log_files || []).length > 0 && (
+            <Card size="small" title="容器日志文件（前 10）">
+              <List size="small" dataSource={diagnosis.log_files} renderItem={(item) => (
+                <List.Item><Text code>{item.path.split("/").pop()}</Text><Text>{item.size}</Text></List.Item>
+              )} />
+            </Card>
+          )}
           {topDirs.length > 0 && (
             <Card size="small" title="大目录排行">
               <List size="small" dataSource={topDirs} renderItem={(item) => <List.Item><Text code>{item.path}</Text><Text>{item.size}</Text></List.Item>} />

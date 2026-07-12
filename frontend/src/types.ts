@@ -238,12 +238,41 @@ export type DiskUsageItem = {
   bytes: number;
 };
 
+export type DockerImageInfo = {
+  repository: string;
+  tag: string;
+  size: string;
+  created_at: string;
+  id: string;
+  dangling: boolean;
+};
+
+export type DockerVolumeInfo = {
+  name: string;
+  driver: string;
+  mountpoint: string;
+  orphan: boolean;
+};
+
+export type DiskWasteBreakdown = {
+  build_cache: string;
+  dangling_images: string;
+  unused_images: string;
+  orphan_volumes: string;
+  container_logs: string;
+  total_reclaimable: string;
+};
+
 export type DiskDiagnosisResponse = {
   filesystems: DiskFilesystemInfo[];
   docker: DockerDiskInfo;
   top_dirs: DiskUsageItem[];
   docker_ok: boolean;
   checked_at: string;
+  images?: DockerImageInfo[];
+  volumes?: DockerVolumeInfo[];
+  log_files?: DiskUsageItem[];
+  waste_breakdown?: DiskWasteBreakdown;
 };
 
 export type DiskFilesystemInfo = {
@@ -283,11 +312,20 @@ export type DiskCleanupRequest = {
   confirm: string;
 };
 
+export type DiskCleanupBreakdownItem = {
+  category: string;
+  reclaimed: string;
+  command: string;
+  success: boolean;
+  error?: string;
+};
+
 export type DiskCleanupResponse = {
   ok: boolean;
   level: string;
   reclaimed: string;
   details: string;
+  breakdown?: DiskCleanupBreakdownItem[];
 };
 
 export type MonitorHostConfig = {
