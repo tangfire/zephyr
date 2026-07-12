@@ -1124,13 +1124,26 @@ func (a *App) apiLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode})
+	clearSessionCookie(w, r)
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (a *App) logout(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{Name: cookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteLaxMode})
+	clearSessionCookie(w, r)
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+// clearSessionCookie invalidates the session cookie by expiring it immediately.
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func (a *App) auth(next http.HandlerFunc) http.HandlerFunc {
