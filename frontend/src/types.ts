@@ -328,6 +328,8 @@ export type RuntimeConfigInput = {
   monitor_warn_disk: number;
   monitor_crit_disk: number;
   monitor_warn_memory: number;
+  monitor_auto_cleanup_level: string;
+  monitor_auto_cleanup_disk: number;
 };
 
 export type SetupStatusItem = {

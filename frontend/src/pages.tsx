@@ -6,6 +6,7 @@ import {
   Checkbox,
   Col,
   Descriptions,
+  Divider,
   Drawer,
   Empty,
   Form,
@@ -2375,6 +2376,7 @@ function DiskDiagnosisDrawer({
   const [confirmText, setConfirmText] = useState("");
   const [cleaning, setCleaning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<string>("");
+  const [autoCleanupConfig, setAutoCleanupConfig] = useState<{ level: string; disk: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -2382,7 +2384,10 @@ function DiskDiagnosisDrawer({
     setCleanupResult("");
     Promise.all([
       fetchDiskDiagnosis().then(setDiagnosis),
-      fetchDiskCleanupPreview().then(setPreview)
+      fetchDiskCleanupPreview().then(setPreview),
+      api<{ config: { monitor_auto_cleanup_level: string; monitor_auto_cleanup_disk: number } }>("/api/setup/config").then(
+        (data) => setAutoCleanupConfig(data.config)
+      ).catch(() => {})
     ]).finally(() => setLoading(false));
   }, [open]);
 
@@ -2461,6 +2466,15 @@ function DiskDiagnosisDrawer({
           )}
           {!diagnosis?.docker_ok && (
             <Alert type="info" showIcon message="Docker 不可用" description="当前环境无法访问 Docker 守护进程，诊断和清理功能受限。请通过 SSH 监控查看磁盘状态。" />
+          )}
+          {autoCleanupConfig && (autoCleanupConfig.level || autoCleanupConfig.disk > 0) && (
+            <Card size="small" title="自动清理配置">
+              <Descriptions size="small" column={1}>
+                <Descriptions.Item label="清理级别">{autoCleanupConfig.level || "禁用"}</Descriptions.Item>
+                <Descriptions.Item label="触发阈值">{autoCleanupConfig.disk > 0 ? `${autoCleanupConfig.disk}%` : "禁用"}</Descriptions.Item>
+                <Descriptions.Item label="冷却间隔">30 分钟</Descriptions.Item>
+              </Descriptions>
+            </Card>
           )}
         </Space>
       </Spin>
@@ -4111,6 +4125,23 @@ function SetupConfigPanel({ onReload, initialSection = "guide" }: { onReload: ()
               </Form.Item>
             </Col>
           </Row>
+          <Divider plain>自动清理</Divider>
+          <Row gutter={12}>
+            <Col xs={12} lg={6}>
+              <Form.Item label="自动清理级别" name="monitor_auto_cleanup_level" extra="空=禁用，safe=仅 build cache，standard=含悬空镜像">
+                <Select allowClear placeholder="禁用" options={[
+                  { value: "", label: "禁用" },
+                  { value: "safe", label: "safe — 仅 build cache" },
+                  { value: "standard", label: "standard — 含悬空镜像" }
+                ]} />
+              </Form.Item>
+            </Col>
+            <Col xs={12} lg={6}>
+              <Form.Item label="自动清理阈值 %" name="monitor_auto_cleanup_disk" extra="磁盘使用率达到此百分比时自动触发清理">
+                <InputNumber min={0} max={100} style={{ width: "100%" }} placeholder="0=禁用" />
+              </Form.Item>
+            </Col>
+          </Row>
         </ProCard>
         )}
 
@@ -4569,7 +4600,9 @@ function normalizeSetupFormValues(values: RuntimeConfigInput): RuntimeConfigInpu
     monitor_refresh_seconds: Number(values.monitor_refresh_seconds || 20),
     monitor_warn_disk: Number(values.monitor_warn_disk || 80),
     monitor_crit_disk: Number(values.monitor_crit_disk || 90),
-    monitor_warn_memory: Number(values.monitor_warn_memory || 80)
+    monitor_warn_memory: Number(values.monitor_warn_memory || 80),
+    monitor_auto_cleanup_level: String(values.monitor_auto_cleanup_level || "").trim(),
+    monitor_auto_cleanup_disk: Number(values.monitor_auto_cleanup_disk || 0)
   };
 }
 

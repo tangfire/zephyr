@@ -79,6 +79,8 @@ type Config struct {
 	MonitorWarnDisk               int
 	MonitorCritDisk               int
 	MonitorWarnMemory             int
+	MonitorAutoCleanupLevel       string
+	MonitorAutoCleanupDisk        int
 	AuditPath                     string
 	TasksPath                     string
 	FrontendDir                   string
@@ -108,6 +110,8 @@ type RuntimeConfigFile struct {
 	MonitorWarnDisk       int                  `json:"monitor_warn_disk,omitempty"`
 	MonitorCritDisk       int                  `json:"monitor_crit_disk,omitempty"`
 	MonitorWarnMemory     int                  `json:"monitor_warn_memory,omitempty"`
+	MonitorAutoCleanupLevel string              `json:"monitor_auto_cleanup_level,omitempty"`
+	MonitorAutoCleanupDisk  int                  `json:"monitor_auto_cleanup_disk,omitempty"`
 }
 
 type RuntimeConfigInput struct {
@@ -134,6 +138,8 @@ type RuntimeConfigInput struct {
 	MonitorWarnDisk       int                  `json:"monitor_warn_disk"`
 	MonitorCritDisk       int                  `json:"monitor_crit_disk"`
 	MonitorWarnMemory     int                  `json:"monitor_warn_memory"`
+	MonitorAutoCleanupLevel string              `json:"monitor_auto_cleanup_level"`
+	MonitorAutoCleanupDisk  int                  `json:"monitor_auto_cleanup_disk"`
 }
 
 type SetupConfigResponse struct {
@@ -698,6 +704,8 @@ func loadConfig() Config {
 		MonitorWarnDisk:               envIntFirst(80, "PEAPOD_MONITOR_WARN_DISK", "ZEPHYR_MONITOR_WARN_DISK", "ZEFIRE_MONITOR_WARN_DISK"),
 		MonitorCritDisk:               envIntFirst(90, "PEAPOD_MONITOR_CRIT_DISK", "ZEPHYR_MONITOR_CRIT_DISK", "ZEFIRE_MONITOR_CRIT_DISK"),
 		MonitorWarnMemory:             envIntFirst(80, "PEAPOD_MONITOR_WARN_MEMORY", "ZEPHYR_MONITOR_WARN_MEMORY", "ZEFIRE_MONITOR_WARN_MEMORY"),
+		MonitorAutoCleanupLevel:       envFirst("", "PEAPOD_MONITOR_AUTO_CLEANUP_LEVEL", "ZEPHYR_MONITOR_AUTO_CLEANUP_LEVEL", "ZEFIRE_MONITOR_AUTO_CLEANUP_LEVEL"),
+		MonitorAutoCleanupDisk:        envIntFirst(0, "PEAPOD_MONITOR_AUTO_CLEANUP_DISK", "ZEPHYR_MONITOR_AUTO_CLEANUP_DISK", "ZEFIRE_MONITOR_AUTO_CLEANUP_DISK"),
 		AuditPath:                     envFirst("/data/audit.jsonl", "PEAPOD_AUDIT_PATH", "ZEPHYR_AUDIT_PATH", "ZEFIRE_AUDIT_PATH"),
 		TasksPath:                     envFirst("/data/tasks.json", "PEAPOD_TASKS_PATH", "ZEPHYR_TASKS_PATH", "ZEFIRE_TASKS_PATH"),
 		FrontendDir:                   envFirst("frontend/dist", "PEAPOD_FRONTEND_DIR", "ZEPHYR_FRONTEND_DIR", "ZEFIRE_FRONTEND_DIR"),
@@ -800,6 +808,12 @@ func applyRuntimeConfig(cfg *Config, runtime RuntimeConfigFile) {
 	if runtime.MonitorWarnMemory > 0 {
 		cfg.MonitorWarnMemory = runtime.MonitorWarnMemory
 	}
+	if runtime.MonitorAutoCleanupLevel != "" {
+		cfg.MonitorAutoCleanupLevel = runtime.MonitorAutoCleanupLevel
+	}
+	if runtime.MonitorAutoCleanupDisk > 0 {
+		cfg.MonitorAutoCleanupDisk = runtime.MonitorAutoCleanupDisk
+	}
 }
 
 func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing RuntimeConfigFile) RuntimeConfigFile {
@@ -823,6 +837,8 @@ func runtimeConfigFromInput(input RuntimeConfigInput, current Config, existing R
 		MonitorWarnDisk:       clampInt(input.MonitorWarnDisk, 1, 100, current.MonitorWarnDisk),
 		MonitorCritDisk:       clampInt(input.MonitorCritDisk, 1, 100, current.MonitorCritDisk),
 		MonitorWarnMemory:     clampInt(input.MonitorWarnMemory, 1, 100, current.MonitorWarnMemory),
+		MonitorAutoCleanupLevel: strings.TrimSpace(input.MonitorAutoCleanupLevel),
+		MonitorAutoCleanupDisk:  clampInt(input.MonitorAutoCleanupDisk, 0, 100, current.MonitorAutoCleanupDisk),
 	}
 	cfg.WoodpeckerToken = strings.TrimSpace(input.WoodpeckerToken)
 	if cfg.WoodpeckerToken == "" {
@@ -3743,6 +3759,8 @@ func (a *App) setupConfigResponse(now time.Time) SetupConfigResponse {
 		MonitorWarnDisk:       a.cfg.MonitorWarnDisk,
 		MonitorCritDisk:       a.cfg.MonitorCritDisk,
 		MonitorWarnMemory:     a.cfg.MonitorWarnMemory,
+		MonitorAutoCleanupLevel: a.cfg.MonitorAutoCleanupLevel,
+		MonitorAutoCleanupDisk:  a.cfg.MonitorAutoCleanupDisk,
 	}
 	verification := deploymentVerificationSummary(a.configuredTasks())
 	logStrategy := a.logStrategyStatus()

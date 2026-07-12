@@ -26,6 +26,9 @@ type MonitoringService struct {
 	mu         sync.Mutex
 	cache      MonitoringSummary
 	cacheUntil time.Time
+
+	lastAutoCleanup   time.Time
+	lastCleanupResult string
 }
 
 type MonitorHostConfig struct {
@@ -233,6 +236,9 @@ func (m *MonitoringService) collect(ctx context.Context, now time.Time) Monitori
 		reasons = append(reasons, "SSH："+strings.Join(sshErrors, "；"))
 	}
 	alerts := buildMonitoringAlerts(hosts, containers, m.cfg)
+	if cleanupAlert := m.maybeAutoCleanup(hosts); cleanupAlert != nil {
+		alerts = append(alerts, *cleanupAlert)
+	}
 	if beszelMatched == 0 && sshSuccess == 0 && len(alerts) == 0 {
 		alerts = append(alerts, MonitoringAlert{Level: "critical", Title: "监控不可用", Message: "Beszel 和 SSH 只读兜底都没有返回可用数据"})
 	}
@@ -1304,4 +1310,135 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// maybeAutoCleanup checks if any host exceeds the auto-cleanup disk threshold
+// and executes docker cleanup via SSH on that host. Returns a MonitoringAlert
+// describing the result, or nil if no cleanup was needed/performed.
+// Safety: only safe/standard levels, minimum 30-minute cooldown, only on hosts
+// that have SSH monitoring configured.
+func (m *MonitoringService) maybeAutoCleanup(hosts []MonitoringHost) *MonitoringAlert {
+	level := strings.TrimSpace(m.cfg.MonitorAutoCleanupLevel)
+	threshold := m.cfg.MonitorAutoCleanupDisk
+	if level == "" || threshold <= 0 {
+		return nil
+	}
+	if level != "safe" && level != "standard" {
+		return nil
+	}
+
+	// Cooldown: at least 30 minutes between auto-cleanups
+	now := time.Now()
+	if now.Sub(m.lastAutoCleanup) < 30*time.Minute {
+		return nil
+	}
+
+	// Find the first host that exceeds the threshold and has SSH configured
+	var targetHost *MonitorHostConfig
+	var targetDisk float64
+	for i := range hosts {
+		host := &hosts[i]
+		if host.DiskPercent < float64(threshold) {
+			continue
+		}
+		// Find matching MonitorHostConfig with SSH
+		for j := range m.hosts {
+			cfg := &m.hosts[j]
+			if cfg.ID == host.ID && strings.TrimSpace(firstNonEmpty(cfg.SSHHost, cfg.Address)) != "" {
+				targetHost = cfg
+				targetDisk = host.DiskPercent
+				break
+			}
+		}
+		if targetHost != nil {
+			break
+		}
+	}
+	if targetHost == nil {
+		return nil
+	}
+
+	// Build cleanup command
+	var cmdStr string
+	switch level {
+	case "safe":
+		cmdStr = "docker builder prune --all --force 2>&1"
+	case "standard":
+		cmdStr = "docker system prune -f 2>&1"
+	}
+
+	// Execute via SSH
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	output, err := m.runSSHCleanup(cleanupCtx, *targetHost, cmdStr)
+	m.lastAutoCleanup = now
+
+	if err != nil {
+		m.lastCleanupResult = fmt.Sprintf("自动清理失败：%v", err)
+		return &MonitoringAlert{
+			Level:    "warning",
+			HostID:   targetHost.ID,
+			HostName: targetHost.Name,
+			Metric:   "disk",
+			Title:    "自动清理失败",
+			Message:  fmt.Sprintf("%s 磁盘 %.1f%%，自动清理失败：%v", targetHost.Name, targetDisk, err),
+		}
+	}
+
+	reclaimed := extractReclaimedSize(output)
+	if reclaimed == "" {
+		reclaimed = "完成"
+	}
+	m.lastCleanupResult = fmt.Sprintf("已自动清理 %s：回收 %s", targetHost.Name, reclaimed)
+	return &MonitoringAlert{
+		Level:    "info",
+		HostID:   targetHost.ID,
+		HostName: targetHost.Name,
+		Metric:   "disk",
+		Title:    "自动清理完成",
+		Message:  fmt.Sprintf("%s 磁盘 %.1f%%，已自动执行 %s 清理，回收 %s", targetHost.Name, targetDisk, level, reclaimed),
+	}
+}
+
+// runSSHCleanup connects to a host via SSH and executes a cleanup command.
+func (m *MonitoringService) runSSHCleanup(ctx context.Context, cfg MonitorHostConfig, command string) (string, error) {
+	keyPath := strings.TrimSpace(cfg.SSHKeyPath)
+	if keyPath == "" {
+		keyPath = m.cfg.MonitorSSHKeyPath
+	}
+	if keyPath == "" {
+		return "", errors.New("SSH key 未配置")
+	}
+	address := strings.TrimSpace(firstNonEmpty(cfg.SSHHost, cfg.Address))
+	if address == "" {
+		return "", errors.New("SSH host 未配置")
+	}
+	if _, _, err := net.SplitHostPort(address); err != nil {
+		address = net.JoinHostPort(address, "22")
+	}
+	user := strings.TrimSpace(cfg.SSHUser)
+	if user == "" {
+		user = "codex"
+	}
+	payload, err := os.ReadFile(keyPath)
+	if err != nil {
+		return "", fmt.Errorf("读取 SSH key 失败")
+	}
+	signer, err := ssh.ParsePrivateKey(payload)
+	if err != nil {
+		return "", fmt.Errorf("解析 SSH key 失败")
+	}
+	clientConfig := &ssh.ClientConfig{
+		User:            user,
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+	client, err := ssh.Dial("tcp", address, clientConfig)
+	if err != nil {
+		return "", fmt.Errorf("连接失败")
+	}
+	defer client.Close()
+	return runSSHSession(ctx, client, command)
 }
