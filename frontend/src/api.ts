@@ -1,3 +1,5 @@
+import type { DiskDiagnosisResponse, DiskCleanupPreviewResponse, DiskCleanupRequest, DiskCleanupResponse } from "./types";
+
 type ApiErrorPayload = {
   error?: string;
   details?: string[];
@@ -57,9 +59,6 @@ function parseAPIErrorPayload(text: string): ApiErrorPayload {
   }
   return { error: text };
 }
-
-import type { DiskDiagnosisResponse, DiskCleanupPreviewResponse, DiskCleanupRequest, DiskCleanupResponse } from "./types";
-
 export async function fetchDiskDiagnosis(): Promise<DiskDiagnosisResponse> {
   return api<DiskDiagnosisResponse>("/api/system/disk-diagnosis");
 }
