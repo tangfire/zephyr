@@ -5531,10 +5531,18 @@ export function rollbackRevisionLabel(revision: DeploymentRevision, nowMs: numbe
 
 export function rollbackRevisionsForStatus(status?: DeploymentStatus): DeploymentRevision[] {
   if (!status) return [];
-  const currentKey = `${status.pipeline}:${status.current_branch || ""}:${status.current_commit || ""}`;
+  const currentCommit = (status.current_commit || status.actual_commit || "").trim().toLowerCase();
+  const seenCommits = new Set<string>();
   const revisions = (status.revisions || []).filter((revision) => {
     if (!revision.commit && !revision.pipeline) return false;
-    return `${revision.pipeline}:${revision.branch || ""}:${revision.commit || ""}` !== currentKey;
+    const commit = (revision.commit || "").trim().toLowerCase();
+    if (commit && currentCommit && (commit.startsWith(currentCommit) || currentCommit.startsWith(commit))) return false;
+    if (commit) {
+      const key = commit.slice(0, 8);
+      if (seenCommits.has(key)) return false;
+      seenCommits.add(key);
+    }
+    return true;
   });
   if (revisions.length) return revisions;
   if (status.previous_branch || status.previous_commit || status.previous_pipeline || status.previous_deployed_at) {

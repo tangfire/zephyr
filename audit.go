@@ -192,7 +192,7 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 				status.LatestAction = deploymentActionText(repoID, repoName, pipeline)
 				status.LatestStatus = pipeline.Status
 				status.LatestBranch = fallbackText(pipeline.Branch, "-")
-				status.LatestCommit = pipeline.Commit
+				status.LatestCommit = deploymentCommitFromPipeline(pipeline)
 				status.LatestAt = pipelineActivityAt(pipeline)
 				status.LatestPipeline = pipeline.Number
 				status.LatestTriggeredBy = pipelineActor(pipeline)
@@ -284,7 +284,7 @@ func deploymentStatusFromPipeline(target deploymentTarget, repoID int, repoName 
 		RepoName:         repoName,
 		ConfiguredBranch: fallbackText(configuredBranch, fallbackText(pipeline.Branch, "main")),
 		CurrentBranch:    fallbackText(pipeline.Branch, "-"),
-		CurrentCommit:    pipeline.Commit,
+		CurrentCommit:    deploymentCommitFromPipeline(pipeline),
 		LastAction:       deploymentActionText(repoID, repoName, pipeline),
 		LastStatus:       pipeline.Status,
 		LastDeployedAt:   pipelineFinishedAt(pipeline),
@@ -293,6 +293,110 @@ func deploymentStatusFromPipeline(target deploymentTarget, repoID int, repoName 
 		TriggeredAt:      pipeline.PedpodTriggeredAt,
 		Variables:        sanitizeVariables(pipeline.Variables),
 	}
+}
+
+func deploymentCommitFromPipeline(pipeline Pipeline) string {
+	variables := pipeline.Variables
+	if isRollbackPipeline(pipeline) {
+		for _, key := range []string{
+			"PEAPOD_ROLLBACK_COMMIT",
+			"ROLLBACK_COMMIT",
+			"ROLLBACK_VERSION",
+			"ROLLBACK_SHA",
+			"TARGET_SHA",
+			"TARGET_COMMIT",
+			"DEPLOY_COMMIT",
+		} {
+			if commit := normalizeDeploymentCommit(variableValue(variables, key)); commit != "" {
+				return commit
+			}
+		}
+		if commit := commitFromImageTag(variableValue(variables, "IMAGE_TAG")); commit != "" {
+			return commit
+		}
+	}
+	if commit := normalizeDeploymentCommit(variableValue(variables, "PEAPOD_DEPLOY_COMMIT")); commit != "" {
+		return commit
+	}
+	return strings.TrimSpace(pipeline.Commit)
+}
+
+func isRollbackPipeline(pipeline Pipeline) bool {
+	variables := pipeline.Variables
+	action := strings.ToLower(strings.TrimSpace(variableValue(variables, "DEPLOY_ACTION")))
+	if action == "rollback" {
+		return true
+	}
+	if truthyVariable(variableValue(variables, "ROLLBACK_TO_PREVIOUS")) {
+		return true
+	}
+	for _, key := range []string{"ROLLBACK_COMMIT", "ROLLBACK_VERSION", "PEAPOD_ROLLBACK_COMMIT"} {
+		if strings.TrimSpace(variableValue(variables, key)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func truthyVariable(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeDeploymentCommit(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	value = strings.TrimPrefix(value, "refs/heads/")
+	value = strings.TrimPrefix(value, "origin/")
+	value = strings.Trim(value, `"'`)
+	if looksLikeCommit(value) {
+		return value
+	}
+	return ""
+}
+
+func commitFromImageTag(tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return ""
+	}
+	for _, part := range strings.FieldsFunc(tag, func(r rune) bool {
+		return r == '-' || r == '_' || r == ':' || r == '/'
+	}) {
+		if commit := normalizeDeploymentCommit(part); commit != "" && containsHexLetter(commit) {
+			return commit
+		}
+	}
+	return ""
+}
+
+func looksLikeCommit(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) < 7 || len(value) > 40 {
+		return false
+	}
+	for _, r := range value {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func containsHexLetter(value string) bool {
+	for _, r := range value {
+		if (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+			return true
+		}
+	}
+	return false
 }
 
 func deploymentRevisions(rows []DeploymentStatus, limit int) []DeploymentRevision {
@@ -863,4 +967,3 @@ func isSensitiveAuditKey(key string) bool {
 	}
 	return false
 }
-

@@ -129,6 +129,61 @@ func TestDeploymentStatusesOnlyVerifiedPipelineBecomesCurrent(t *testing.T) {
 	}
 }
 
+func TestDeploymentStatusesUseRollbackTargetCommit(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "current-source-sha")
+	if err := os.WriteFile(marker, []byte("abcdef1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	task := Task{
+		ID:     "rollback-app",
+		Title:  "回滚应用",
+		Group:  "业务服务",
+		RepoID: 7,
+		Branch: "main",
+		Variables: map[string]string{
+			"DEPLOY_ACTION":             "rollback",
+			"PEAPOD_PROJECT_ID":         "app",
+			"PEAPOD_DEPLOY_MARKER_PATH": marker,
+		},
+	}
+	variables := map[string]string{
+		"DEPLOY_ACTION":             "rollback",
+		"PEAPOD_PROJECT_ID":         "app",
+		"PEAPOD_DEPLOY_MARKER_PATH": marker,
+		"ROLLBACK_COMMIT":           "abcdef1",
+	}
+	pipelines := map[int][]Pipeline{7: {
+		{Number: 9, Status: "success", Branch: "main", Commit: "current9", Finished: 900, Variables: variables},
+	}}
+
+	rows := deploymentStatuses([]Task{task}, map[int]string{7: "app"}, pipelines)
+	if len(rows) != 1 {
+		t.Fatalf("rows len = %d, want 1", len(rows))
+	}
+	if rows[0].CurrentCommit != "abcdef1" {
+		t.Fatalf("CurrentCommit = %q, want rollback target", rows[0].CurrentCommit)
+	}
+	if rows[0].LatestCommit != "abcdef1" {
+		t.Fatalf("LatestCommit = %q, want rollback target", rows[0].LatestCommit)
+	}
+	if !rows[0].DeployVerified {
+		t.Fatalf("rollback target should verify against marker: status=%s message=%s", rows[0].DeployVerifyStatus, rows[0].DeployVerifyMessage)
+	}
+}
+
+func TestDeploymentCommitFromRollbackImageTagUsesLeadingCommit(t *testing.T) {
+	pipeline := Pipeline{
+		Commit: "current9",
+		Variables: map[string]string{
+			"DEPLOY_ACTION": "rollback",
+			"IMAGE_TAG":     "abcdef1-contentabc123",
+		},
+	}
+	if got := deploymentCommitFromPipeline(pipeline); got != "abcdef1" {
+		t.Fatalf("deploymentCommitFromPipeline = %q, want image tag leading commit", got)
+	}
+}
+
 func TestDeploymentStatusesIgnoreTargetOnlyPipelineNoise(t *testing.T) {
 	pipelines := map[int][]Pipeline{3: {
 		{Number: 1, Status: "success", Branch: "main", Commit: "aaaaaaaa", Finished: 100, Variables: map[string]string{"DEPLOY_TARGET": "production"}},
