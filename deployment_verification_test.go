@@ -171,6 +171,72 @@ func TestDeploymentStatusesUseRollbackTargetCommit(t *testing.T) {
 	}
 }
 
+func TestDeploymentRevisionsKeepOriginalPipelineCommitsWhenMarkerIsCurrent(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "current-source-sha")
+	if err := os.WriteFile(marker, []byte("cbe6587c\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	baseVariables := map[string]string{
+		"PEAPOD_PROJECT_ID":            "app",
+		"PEAPOD_DEPLOY_MARKER_PATH":    marker,
+		"PEAPOD_DEPLOY_VERIFY_URL":     server.URL,
+		"PEAPOD_PROJECT_NAME":          "App",
+		"PEAPOD_PROJECT_GROUP":         "Products",
+		"PEAPOD_DEPLOY_VERIFY_TIMEOUT": "1",
+	}
+	deployVariables := cloneMap(baseVariables)
+	deployVariables["DEPLOY_ACTION"] = "deploy"
+	rollbackVariables := cloneMap(baseVariables)
+	rollbackVariables["DEPLOY_ACTION"] = "rollback"
+	rollbackVariables["ROLLBACK_COMMIT"] = "cbe6587c"
+
+	task := Task{
+		ID:        "deploy-app",
+		Title:     "Deploy App",
+		Group:     "Products",
+		RepoID:    7,
+		RepoName:  "app",
+		Branch:    "main",
+		Variables: deployVariables,
+	}
+	pipelines := map[int][]Pipeline{7: {
+		{Number: 797, Status: "success", Branch: "main", Commit: "runnerhead", Finished: 797, Variables: rollbackVariables},
+		{Number: 796, Status: "success", Branch: "main", Commit: "cbe6587c", Finished: 796, Variables: deployVariables},
+		{Number: 792, Status: "success", Branch: "main", Commit: "347e07bc", Finished: 792, Variables: deployVariables},
+		{Number: 790, Status: "success", Branch: "main", Commit: "04e00186", Finished: 790, Variables: deployVariables},
+	}}
+
+	rows := deploymentStatuses([]Task{task}, map[int]string{7: "app"}, pipelines)
+	if len(rows) != 1 {
+		t.Fatalf("rows len = %d, want 1", len(rows))
+	}
+	status := rows[0]
+	if status.CurrentCommit != "cbe6587c" {
+		t.Fatalf("CurrentCommit = %q, want current marker commit", status.CurrentCommit)
+	}
+	if len(status.Revisions) < 4 {
+		t.Fatalf("revisions len = %d, want at least 4: %#v", len(status.Revisions), status.Revisions)
+	}
+	commitsByPipeline := map[int64]string{}
+	for _, revision := range status.Revisions {
+		commitsByPipeline[revision.Pipeline] = revision.Commit
+	}
+	if commitsByPipeline[792] != "347e07bc" {
+		t.Fatalf("pipeline #792 revision commit = %q, want original commit 347e07bc", commitsByPipeline[792])
+	}
+	if commitsByPipeline[790] != "04e00186" {
+		t.Fatalf("pipeline #790 revision commit = %q, want original commit 04e00186", commitsByPipeline[790])
+	}
+	if status.PreviousPipeline != 792 || status.PreviousCommit != "347e07bc" {
+		t.Fatalf("previous = #%d %q, want #792 347e07bc", status.PreviousPipeline, status.PreviousCommit)
+	}
+}
+
 func TestDeploymentCommitFromRollbackImageTagUsesLeadingCommit(t *testing.T) {
 	pipeline := Pipeline{
 		Commit: "current9",

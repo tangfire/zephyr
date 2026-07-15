@@ -161,7 +161,7 @@ function rollbackInputsFromForm(task: Task, statuses: DeploymentStatus[], values
     const value = String(values[key] || "").trim();
     if (value) seeded[key] = value;
   }
-  const result = selected ? { ...rollbackPresetInputs(selected), ...seeded } : seeded;
+  const result = selected ? { ...seeded, ...rollbackPresetInputs(selected) } : seeded;
   delete result.rollback_revision;
   return result;
 }

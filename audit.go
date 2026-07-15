@@ -166,6 +166,7 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 
 	verifiedByTarget := map[string][]DeploymentStatus{}
 	unverifiedByTarget := map[string][]DeploymentStatus{}
+	successHistoryByTarget := map[string][]DeploymentStatus{}
 	for repoID, rows := range pipelines {
 		repoName := repos[repoID]
 		for _, pipeline := range rows {
@@ -198,7 +199,9 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 				status.LatestTriggeredBy = pipelineActor(pipeline)
 			}
 			if pipeline.Status == "success" {
-				candidate := deploymentStatusFromPipeline(target, repoID, repoName, configuredBranch, pipeline)
+				historyCandidate := deploymentStatusFromPipeline(target, repoID, repoName, configuredBranch, pipeline)
+				successHistoryByTarget[target.ID] = append(successHistoryByTarget[target.ID], historyCandidate)
+				candidate := historyCandidate
 				applyDeploymentVerification(&candidate, verifyConfigs[target.ID])
 				if candidate.DeployVerified {
 					verifiedByTarget[target.ID] = append(verifiedByTarget[target.ID], candidate)
@@ -213,6 +216,10 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 		verified := verifiedByTarget[id]
 		sort.SliceStable(verified, func(i, j int) bool {
 			return verified[i].LastDeployedAt > verified[j].LastDeployedAt
+		})
+		successHistory := successHistoryByTarget[id]
+		sort.SliceStable(successHistory, func(i, j int) bool {
+			return successHistory[i].LastDeployedAt > successHistory[j].LastDeployedAt
 		})
 		if len(verified) > 0 {
 			current := verified[0]
@@ -234,10 +241,11 @@ func deploymentStatuses(tasks []Task, repos map[int]string, pipelines map[int][]
 			if status.ConfiguredBranch == "" {
 				status.ConfiguredBranch = current.ConfiguredBranch
 			}
-			status.Revisions = deploymentRevisions(verified, 12)
 		}
-		if len(verified) > 1 {
-			previous := verified[1]
+		if len(successHistory) > 0 {
+			status.Revisions = deploymentRevisions(successHistory, 12)
+		}
+		if previous, ok := previousDeploymentRevision(successHistory, status.CurrentCommit, status.Pipeline); ok {
 			status.PreviousAction = previous.LastAction
 			status.PreviousBranch = previous.CurrentBranch
 			status.PreviousCommit = previous.CurrentCommit
@@ -428,6 +436,21 @@ func deploymentRevisions(rows []DeploymentStatus, limit int) []DeploymentRevisio
 		}
 	}
 	return revisions
+}
+
+func previousDeploymentRevision(rows []DeploymentStatus, currentCommit string, currentPipeline int64) (DeploymentStatus, bool) {
+	currentCommit = strings.TrimSpace(currentCommit)
+	for _, row := range rows {
+		if currentPipeline > 0 && row.Pipeline == currentPipeline {
+			continue
+		}
+		commit := strings.TrimSpace(row.CurrentCommit)
+		if currentCommit != "" && commit != "" && deploymentCommitMatches(currentCommit, commit) {
+			continue
+		}
+		return row, true
+	}
+	return DeploymentStatus{}, false
 }
 
 func deploymentTargetFromPipeline(repoID int, repoName string, pipeline Pipeline, taskByID map[string]Task, tasks []Task) (deploymentTarget, string, bool) {
