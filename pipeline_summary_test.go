@@ -64,3 +64,32 @@ func TestDecodeWoodpeckerLogLinesRejectsHTML(t *testing.T) {
 		t.Fatal("expected JSON decode error for HTML payload")
 	}
 }
+
+func TestNormalizePipelineDisplayCommitUsesRollbackTarget(t *testing.T) {
+	pipeline := Pipeline{
+		Commit: "57f67cef16ed44ae6754c7216f3d417b75542bf4",
+		Variables: map[string]string{
+			"DEPLOY_ACTION":   "rollback",
+			"ROLLBACK_COMMIT": "35b1a9c3f5f26d2af13b30d86c75f9031d78a71b",
+		},
+	}
+
+	got := normalizePipelineDisplayCommit(pipeline)
+	if got.Commit != "35b1a9c3f5f26d2af13b30d86c75f9031d78a71b" {
+		t.Fatalf("Commit = %q, want rollback target", got.Commit)
+	}
+}
+
+func TestNormalizePipelineDisplayCommitKeepsNormalDeployCommit(t *testing.T) {
+	pipeline := Pipeline{
+		Commit: "57f67cef16ed44ae6754c7216f3d417b75542bf4",
+		Variables: map[string]string{
+			"DEPLOY_ACTION": "deploy",
+		},
+	}
+
+	got := normalizePipelineDisplayCommit(pipeline)
+	if got.Commit != pipeline.Commit {
+		t.Fatalf("Commit = %q, want original commit", got.Commit)
+	}
+}

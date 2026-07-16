@@ -536,6 +536,7 @@ func (a *App) listPipelines(repoID int, limit int) ([]Pipeline, error) {
 	}
 	rows = a.hydratePipelineDetails(repoID, rows, 6)
 	for index := range rows {
+		rows[index] = normalizePipelineDisplayCommit(rows[index])
 		rows[index].Variables = sanitizeVariables(rows[index].Variables)
 	}
 	return rows, nil
@@ -597,6 +598,7 @@ func (a *App) pipelineSummary(repoID int, number int64) (PipelineSummary, error)
 	if err != nil {
 		return PipelineSummary{}, err
 	}
+	pipeline = normalizePipelineDisplayCommit(pipeline)
 	pipeline.Variables = sanitizeVariables(pipeline.Variables)
 	steps := decodePipelineSteps(payload)
 	tail, tailErr := a.pipelineFailureLogTail(repoID, number, steps)
@@ -689,6 +691,16 @@ func decodePipelinePayload(payload []byte) (Pipeline, error) {
 		pipeline.Variables = variables
 	}
 	return pipeline, nil
+}
+
+func normalizePipelineDisplayCommit(pipeline Pipeline) Pipeline {
+	if !isRollbackPipeline(pipeline) {
+		return pipeline
+	}
+	if commit := deploymentCommitFromPipeline(pipeline); commit != "" {
+		pipeline.Commit = commit
+	}
+	return pipeline
 }
 
 func decodePipelineSteps(payload []byte) []PipelineStep {
